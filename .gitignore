@@ -1,0 +1,2 @@
+# Prevents your Supabase credentials from being uploaded to GitHub
+.streamlit/secrets.toml
