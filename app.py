@@ -150,8 +150,8 @@ def import_sprints(team_id: str, df: pd.DataFrame):
             "team_id":          team_id,
             "sprint_name":      str(row["sprint_name"]),
             "sprint_date":      str(sprint_date) if pd.notna(sprint_date) else None,
-            "completed_points": int(row.get("completed_points") or 0),
-            "completed_issues": int(row.get("completed_issues") or 0),
+            "completed_points": int(row["completed_points"]) if pd.notna(row.get("completed_points")) else 0,
+            "completed_issues": int(row["completed_issues"]) if pd.notna(row.get("completed_issues")) else 0,
             "exclude":          bool(row.get("exclude", False)),
         })
     db().table("sprint_data").insert(records).execute()
