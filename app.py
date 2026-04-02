@@ -137,7 +137,14 @@ def save_team_config(team_id: str, data: dict):
 
 def get_sprint_data(team_id: str):
     rows = db().table("sprint_data").select("*").eq("team_id", team_id).execute().data
-    rows.sort(key=lambda s: (s["sprint_date"] is None, s["sprint_date"] or "", s["created_at"]))
+    # sort_order (explicit user ordering) takes priority; fall back to date then created_at
+    rows.sort(key=lambda s: (
+        s.get("sort_order") is None,
+        s.get("sort_order") or 0,
+        s["sprint_date"] is None,
+        s["sprint_date"] or "",
+        s["created_at"],
+    ))
     return rows
 
 
@@ -251,6 +258,8 @@ def page_teams():
             if saved:
                 if new_name.strip():
                     update_team(team["id"], new_name.strip())
+                    if st.session_state.get("current_team_id") == team["id"]:
+                        st.session_state["current_team_name"] = new_name.strip()
                 st.session_state.pop(f"renaming_{team['id']}", None)
                 st.rerun()
             if cancelled:
@@ -318,11 +327,9 @@ def page_sprint_data():
         )
 
         if st.button("Save Changes", type="primary"):
-            # Sort by Order before saving so the insertion order reflects
-            # the user's intended sequence.
             edited = edited.sort_values("Order", na_position="last").reset_index(drop=True)
             records = []
-            for _, row in edited.iterrows():
+            for idx, (_, row) in enumerate(edited.iterrows()):
                 name = row["Sprint Name"]
                 if not name or (isinstance(name, float) and np.isnan(name)):
                     continue
@@ -334,6 +341,7 @@ def page_sprint_data():
                     "completed_points": int(row["Completed Points"]) if pd.notna(row["Completed Points"]) else 0,
                     "completed_issues": int(row["Completed Issues"]) if pd.notna(row["Completed Issues"]) else 0,
                     "exclude":          bool(row["Exclude"]) if pd.notna(row["Exclude"]) else False,
+                    "sort_order":       int(row["Order"]) if pd.notna(row["Order"]) else idx + 1,
                 })
             replace_sprint_data(team_id, records)
             st.success("Sprint data saved.")
@@ -777,8 +785,9 @@ def show_sidebar():
                 key="team_selector",
             )
 
-            # Switch team if the selection changed
-            if team_ids[selected_idx] != st.session_state.get("current_team_id"):
+            # Switch team if the ID or name changed (name can change after a rename)
+            if (team_ids[selected_idx] != st.session_state.get("current_team_id") or
+                    team_names[selected_idx] != st.session_state.get("current_team_name")):
                 st.session_state["current_team_id"]   = team_ids[selected_idx]
                 st.session_state["current_team_name"] = team_names[selected_idx]
                 # Stay on the current page if it's a team page, otherwise go to Sprint Data
