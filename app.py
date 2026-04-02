@@ -508,12 +508,14 @@ def page_configuration():
         ["Point", "Issue"],
         index=0 if cfg.get("unit_of_work", "Point") == "Point" else 1,
         help="Which column from Sprint Data drives all calculations.",
+        key="cfg_unit",
     )
     analysis_mode = st.selectbox(
         "Analysis Mode",
         ["Rolling", "All"],
         index=0 if cfg.get("analysis_mode", "Rolling") == "Rolling" else 1,
         help="Rolling uses sliding windows. All treats every sprint as a single group.",
+        key="cfg_mode",
     )
 
     # Sprints per Window is only relevant in Rolling mode
@@ -524,6 +526,7 @@ def page_configuration():
             value=int(cfg.get("sprints_per_window", 5)),
             step=1,
             help="Larger = smoother but slower to react. Smaller = more responsive but more volatile.",
+            key="cfg_window",
         )
     else:
         sprints_per_window = int(cfg.get("sprints_per_window", 5))
@@ -539,6 +542,7 @@ def page_configuration():
         value=float(cfg.get("strong_threshold", 0.5)),
         step=0.01, format="%.2f",
         help="Ratio at or above this = Strong.",
+        key="cfg_strong",
     )
     moderate_threshold = st.number_input(
         "Moderate Threshold",
@@ -546,6 +550,7 @@ def page_configuration():
         value=float(cfg.get("moderate_threshold", 0.33)),
         step=0.01, format="%.2f",
         help="Ratio at or above this (and below Strong) = Moderate.",
+        key="cfg_moderate",
     )
     needs_attention_threshold = st.number_input(
         "Needs Attention Threshold",
@@ -553,6 +558,7 @@ def page_configuration():
         value=float(cfg.get("needs_attention_threshold", 0.25)),
         step=0.01, format="%.2f",
         help="Ratio at or above this (and below Moderate) = Needs Attention. Below this = Very Weak.",
+        key="cfg_needs",
     )
 
     # ── Advanced Settings ─────────────────────────────────────────────────────
@@ -564,6 +570,7 @@ def page_configuration():
         value=float(cfg.get("conservative_percentile", 0.15)),
         step=0.01, format="%.2f",
         help="0.15 = 15th percentile. The team met or exceeded this level 85% of the time.",
+        key="cfg_conservative",
     )
 
     # Trend Lookback is only meaningful in Rolling mode (All mode = 1 window, no trend)
@@ -574,6 +581,7 @@ def page_configuration():
             value=int(cfg.get("trend_lookback", 5)),
             step=1,
             help="How many windows back to compare when calculating the trend.",
+            key="cfg_trend",
         )
     else:
         trend_lookback = int(cfg.get("trend_lookback", 5))
@@ -585,6 +593,7 @@ def page_configuration():
         value=int(cfg.get("min_sprints_warning", 10)),
         step=1,
         help="Show a warning if the sprint count falls below this number.",
+        key="cfg_min_warn",
     )
 
     col_save, col_reset = st.columns([3, 1])
@@ -604,8 +613,10 @@ def page_configuration():
         st.success("Configuration saved.")
 
     if col_reset.button("Reset to Defaults", use_container_width=True):
-        save_team_config(team_id, {**DEFAULT_CONFIG, "team_id": team_id})
-        st.success("Configuration reset to defaults.")
+        save_team_config(team_id, DEFAULT_CONFIG.copy())
+        for key in ["cfg_unit", "cfg_mode", "cfg_window", "cfg_strong", "cfg_moderate",
+                    "cfg_needs", "cfg_conservative", "cfg_trend", "cfg_min_warn"]:
+            st.session_state.pop(key, None)
         st.rerun()
 
 
