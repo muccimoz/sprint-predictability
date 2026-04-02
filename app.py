@@ -614,9 +614,16 @@ def page_configuration():
 
     if col_reset.button("Reset to Defaults", use_container_width=True):
         save_team_config(team_id, DEFAULT_CONFIG.copy())
-        for key in ["cfg_unit", "cfg_mode", "cfg_window", "cfg_strong", "cfg_moderate",
-                    "cfg_needs", "cfg_conservative", "cfg_trend", "cfg_min_warn"]:
-            st.session_state.pop(key, None)
+        st.session_state["cfg_unit"]         = "Point"
+        st.session_state["cfg_mode"]         = "Rolling"
+        st.session_state["cfg_window"]       = 5
+        st.session_state["cfg_strong"]       = 0.5
+        st.session_state["cfg_moderate"]     = 0.33
+        st.session_state["cfg_needs"]        = 0.25
+        st.session_state["cfg_conservative"] = 0.15
+        st.session_state["cfg_trend"]        = 5
+        st.session_state["cfg_min_warn"]     = 10
+        st.success("Configuration reset to defaults.")
         st.rerun()
 
 
