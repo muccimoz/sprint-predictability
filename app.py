@@ -1,6 +1,5 @@
 import os
 import streamlit as st
-import streamlit.components.v1 as components
 from supabase import create_client, Client
 import pandas as pd
 import numpy as np
@@ -84,13 +83,21 @@ def do_logout():
     clear_session()
 
 
-def handle_password_recovery(code: str = None, access_token: str = None, refresh_token: str = None):
+def handle_password_recovery(token_hash: str = None, code: str = None,
+                             access_token: str = None, refresh_token: str = None):
     st.title("Reset Your Password")
 
     # Establish the recovery session once and store it — avoids reusing one-time tokens on reruns.
     if "recovery_session" not in st.session_state:
         try:
-            if code:
+            if token_hash:
+                # Token-hash flow: verify the OTP token from the email template
+                r = get_supabase().auth.verify_otp({"token_hash": token_hash, "type": "recovery"})
+                st.session_state["recovery_session"] = {
+                    "access_token":  r.session.access_token,
+                    "refresh_token": r.session.refresh_token,
+                }
+            elif code:
                 # PKCE flow: exchange the one-time code for a session
                 r = get_supabase().auth.exchange_code_for_session({"auth_code": code})
                 st.session_state["recovery_session"] = {
@@ -98,7 +105,7 @@ def handle_password_recovery(code: str = None, access_token: str = None, refresh
                     "refresh_token": r.session.refresh_token,
                 }
             elif access_token:
-                # Implicit flow: token is passed directly
+                # Implicit flow fallback
                 get_supabase().auth.set_session(access_token, refresh_token or "")
                 st.session_state["recovery_session"] = {
                     "access_token":  access_token,
@@ -942,33 +949,12 @@ def show_sidebar():
 
 # ── Main ───────────────────────────────────────────────────────────────────────
 def main():
-    # Supabase implicit flow puts the recovery token in the URL hash (#access_token=...).
-    # Python can't read hash fragments — this JS snippet detects them and redirects
-    # to the same URL with the token in query params instead, where Python can read them.
-    components.html("""
-    <script>
-    try {
-        var hash = window.top.location.hash;
-        if (hash && hash.indexOf('type=recovery') !== -1) {
-            var p = new URLSearchParams(hash.slice(1));
-            var at = p.get('access_token');
-            var rt = p.get('refresh_token') || '';
-            if (at) {
-                window.top.location.replace(
-                    window.top.location.pathname +
-                    '?access_token=' + encodeURIComponent(at) +
-                    '&refresh_token=' + encodeURIComponent(rt) +
-                    '&type=recovery'
-                );
-            }
-        }
-    } catch(e) {}
-    </script>
-    """, height=0)
-
-    # Handle password recovery — supports both PKCE (?code=) and implicit (?access_token=) flows
+    # Handle password recovery — token_hash flow is primary (set via email template customisation)
     params = st.query_params
     if params.get("type") == "recovery":
+        if "token_hash" in params:
+            handle_password_recovery(token_hash=params["token_hash"])
+            return
         if "code" in params:
             handle_password_recovery(code=params["code"])
             return
