@@ -239,7 +239,10 @@ def page_login():
                 if st.form_submit_button("Send Reset Email", use_container_width=True):
                     if reset_email.strip():
                         try:
-                            get_supabase().auth.reset_password_for_email(reset_email.strip())
+                            get_supabase().auth.reset_password_for_email(
+                                reset_email.strip(),
+                                options={"redirect_to": st.secrets["app_url"]},
+                            )
                             st.success("If an account exists with that email, a reset link has been sent.")
                         except Exception as e:
                             st.error(f"Failed to send reset email: {e}")
