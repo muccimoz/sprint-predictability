@@ -1,3 +1,4 @@
+import os
 import streamlit as st
 from supabase import create_client, Client
 import pandas as pd
@@ -45,6 +46,11 @@ def clear_session():
 
 def is_authenticated() -> bool:
     return bool(st.session_state.get("access_token"))
+
+
+def is_auth_error(e: Exception) -> bool:
+    msg = str(e).lower()
+    return any(k in msg for k in ["jwt", "token", "auth", "session", "expired", "invalid"])
 
 
 # ── Auth ──────────────────────────────────────────────────────────────────────
@@ -131,7 +137,6 @@ def save_team_config(team_id: str, data: dict):
 
 def get_sprint_data(team_id: str):
     rows = db().table("sprint_data").select("*").eq("team_id", team_id).execute().data
-    # Sort by sprint_date (None last), then created_at
     rows.sort(key=lambda s: (s["sprint_date"] is None, s["sprint_date"] or "", s["created_at"]))
     return rows
 
@@ -160,7 +165,7 @@ def import_sprints(team_id: str, df: pd.DataFrame):
 # ── Pages ─────────────────────────────────────────────────────────────────────
 def page_login():
     st.title("Sprint Predictability")
-    st.write("Track how reliably your team delivers on what it commits to.")
+    st.write("Measure how consistently your team delivers sprint after sprint.")
     st.divider()
 
     tab_login, tab_signup = st.tabs(["Log In", "Sign Up"])
@@ -237,12 +242,11 @@ def page_teams():
         if col_delete.button("Delete", key=f"delete_{team['id']}"):
             st.session_state[f"confirm_delete_{team['id']}"] = True
 
-        # Inline rename form
         if st.session_state.get(f"renaming_{team['id']}"):
             with st.form(f"rename_form_{team['id']}"):
-                new_name = st.text_input("New name", value=team["name"])
-                c1, c2 = st.columns(2)
-                saved    = c1.form_submit_button("Save")
+                new_name  = st.text_input("New name", value=team["name"])
+                c1, c2    = st.columns(2)
+                saved     = c1.form_submit_button("Save")
                 cancelled = c2.form_submit_button("Cancel")
             if saved:
                 if new_name.strip():
@@ -253,11 +257,8 @@ def page_teams():
                 st.session_state.pop(f"renaming_{team['id']}", None)
                 st.rerun()
 
-        # Delete confirmation
         if st.session_state.get(f"confirm_delete_{team['id']}"):
-            st.warning(
-                f"Delete **{team['name']}**? This will also delete all sprint data for this team."
-            )
+            st.warning(f"Delete **{team['name']}**? This will also delete all sprint data for this team.")
             c1, c2 = st.columns(2)
             if c1.button("Yes, delete", key=f"yes_del_{team['id']}"):
                 delete_team(team["id"])
@@ -294,11 +295,19 @@ def page_sprint_data():
 
         df.columns = ["Sprint Name", "Sprint Date", "Completed Points", "Completed Issues", "Exclude"]
 
+        # Prepend an Order column so users can control sort order explicitly.
+        # When saved, rows are sorted by this column before inserting, so the
+        # order is preserved on the next load (via created_at).
+        df.insert(0, "Order", range(1, len(df) + 1))
+
         edited = st.data_editor(
             df,
             num_rows="dynamic",
             use_container_width=True,
             column_config={
+                "Order":             st.column_config.NumberColumn(
+                                         "Order", min_value=1, step=1,
+                                         help="Change these numbers to reorder sprints. Lower numbers appear first."),
                 "Sprint Name":       st.column_config.TextColumn("Sprint Name", required=True),
                 "Sprint Date":       st.column_config.DateColumn("Sprint Date"),
                 "Completed Points":  st.column_config.NumberColumn("Completed Points", min_value=0, step=1),
@@ -309,11 +318,14 @@ def page_sprint_data():
         )
 
         if st.button("Save Changes", type="primary"):
+            # Sort by Order before saving so the insertion order reflects
+            # the user's intended sequence.
+            edited = edited.sort_values("Order", na_position="last").reset_index(drop=True)
             records = []
             for _, row in edited.iterrows():
                 name = row["Sprint Name"]
                 if not name or (isinstance(name, float) and np.isnan(name)):
-                    continue  # skip blank rows
+                    continue
                 sprint_date = row["Sprint Date"]
                 records.append({
                     "team_id":          team_id,
@@ -397,21 +409,24 @@ def page_configuration():
 
     cfg = get_team_config(team_id)
 
-    with st.form("config_form"):
-        st.subheader("Analysis Settings")
+    # ── Analysis Settings ─────────────────────────────────────────────────────
+    st.subheader("Analysis Settings")
 
-        unit_of_work = st.selectbox(
-            "Unit of Work",
-            ["Point", "Issue"],
-            index=0 if cfg.get("unit_of_work", "Point") == "Point" else 1,
-            help="Which column from Sprint Data drives all calculations.",
-        )
-        analysis_mode = st.selectbox(
-            "Analysis Mode",
-            ["Rolling", "All"],
-            index=0 if cfg.get("analysis_mode", "Rolling") == "Rolling" else 1,
-            help="Rolling uses sliding windows. All treats every sprint as a single group.",
-        )
+    unit_of_work = st.selectbox(
+        "Unit of Work",
+        ["Point", "Issue"],
+        index=0 if cfg.get("unit_of_work", "Point") == "Point" else 1,
+        help="Which column from Sprint Data drives all calculations.",
+    )
+    analysis_mode = st.selectbox(
+        "Analysis Mode",
+        ["Rolling", "All"],
+        index=0 if cfg.get("analysis_mode", "Rolling") == "Rolling" else 1,
+        help="Rolling uses sliding windows. All treats every sprint as a single group.",
+    )
+
+    # Sprints per Window is only relevant in Rolling mode
+    if analysis_mode == "Rolling":
         sprints_per_window = st.number_input(
             "Sprints per Window",
             min_value=2, max_value=20,
@@ -419,41 +434,49 @@ def page_configuration():
             step=1,
             help="Larger = smoother but slower to react. Smaller = more responsive but more volatile.",
         )
+    else:
+        sprints_per_window = int(cfg.get("sprints_per_window", 5))
+        st.caption("Sprints per Window is not used in All mode.")
 
-        st.subheader("Rating Thresholds")
-        st.caption("The avg predictability ratio is compared against these to assign a rating.")
+    # ── Rating Thresholds ─────────────────────────────────────────────────────
+    st.subheader("Rating Thresholds")
+    st.caption("The avg predictability ratio is compared against these to assign a rating.")
 
-        strong_threshold = st.number_input(
-            "Strong Threshold",
-            min_value=0.0, max_value=1.0,
-            value=float(cfg.get("strong_threshold", 0.5)),
-            step=0.01, format="%.2f",
-            help="Ratio at or above this = Strong.",
-        )
-        moderate_threshold = st.number_input(
-            "Moderate Threshold",
-            min_value=0.0, max_value=1.0,
-            value=float(cfg.get("moderate_threshold", 0.33)),
-            step=0.01, format="%.2f",
-            help="Ratio at or above this (and below Strong) = Moderate.",
-        )
-        needs_attention_threshold = st.number_input(
-            "Needs Attention Threshold",
-            min_value=0.0, max_value=1.0,
-            value=float(cfg.get("needs_attention_threshold", 0.25)),
-            step=0.01, format="%.2f",
-            help="Ratio at or above this (and below Moderate) = Needs Attention. Below this = Very Weak.",
-        )
+    strong_threshold = st.number_input(
+        "Strong Threshold",
+        min_value=0.0, max_value=1.0,
+        value=float(cfg.get("strong_threshold", 0.5)),
+        step=0.01, format="%.2f",
+        help="Ratio at or above this = Strong.",
+    )
+    moderate_threshold = st.number_input(
+        "Moderate Threshold",
+        min_value=0.0, max_value=1.0,
+        value=float(cfg.get("moderate_threshold", 0.33)),
+        step=0.01, format="%.2f",
+        help="Ratio at or above this (and below Strong) = Moderate.",
+    )
+    needs_attention_threshold = st.number_input(
+        "Needs Attention Threshold",
+        min_value=0.0, max_value=1.0,
+        value=float(cfg.get("needs_attention_threshold", 0.25)),
+        step=0.01, format="%.2f",
+        help="Ratio at or above this (and below Moderate) = Needs Attention. Below this = Very Weak.",
+    )
 
-        st.subheader("Advanced Settings")
+    # ── Advanced Settings ─────────────────────────────────────────────────────
+    st.subheader("Advanced Settings")
 
-        conservative_percentile = st.number_input(
-            "Conservative Percentile",
-            min_value=0.05, max_value=0.5,
-            value=float(cfg.get("conservative_percentile", 0.15)),
-            step=0.01, format="%.2f",
-            help="0.15 = 15th percentile. The team met or exceeded this level 85% of the time.",
-        )
+    conservative_percentile = st.number_input(
+        "Conservative Percentile",
+        min_value=0.05, max_value=0.5,
+        value=float(cfg.get("conservative_percentile", 0.15)),
+        step=0.01, format="%.2f",
+        help="0.15 = 15th percentile. The team met or exceeded this level 85% of the time.",
+    )
+
+    # Trend Lookback is only meaningful in Rolling mode (All mode = 1 window, no trend)
+    if analysis_mode == "Rolling":
         trend_lookback = st.number_input(
             "Trend Lookback (windows)",
             min_value=1, max_value=20,
@@ -461,27 +484,31 @@ def page_configuration():
             step=1,
             help="How many windows back to compare when calculating the trend.",
         )
-        min_sprints_warning = st.number_input(
-            "Minimum Sprints Warning",
-            min_value=1, max_value=50,
-            value=int(cfg.get("min_sprints_warning", 10)),
-            step=1,
-            help="Show a warning if the sprint count falls below this number.",
-        )
+    else:
+        trend_lookback = int(cfg.get("trend_lookback", 5))
+        st.caption("Trend Lookback is not used in All mode — trend analysis requires multiple windows.")
 
-        if st.form_submit_button("Save Configuration", type="primary"):
-            save_team_config(team_id, {
-                "unit_of_work":              unit_of_work,
-                "analysis_mode":             analysis_mode,
-                "sprints_per_window":        sprints_per_window,
-                "strong_threshold":          strong_threshold,
-                "moderate_threshold":        moderate_threshold,
-                "needs_attention_threshold": needs_attention_threshold,
-                "conservative_percentile":   conservative_percentile,
-                "trend_lookback":            trend_lookback,
-                "min_sprints_warning":       min_sprints_warning,
-            })
-            st.success("Configuration saved.")
+    min_sprints_warning = st.number_input(
+        "Minimum Sprints Warning",
+        min_value=1, max_value=50,
+        value=int(cfg.get("min_sprints_warning", 10)),
+        step=1,
+        help="Show a warning if the sprint count falls below this number.",
+    )
+
+    if st.button("Save Configuration", type="primary"):
+        save_team_config(team_id, {
+            "unit_of_work":              unit_of_work,
+            "analysis_mode":             analysis_mode,
+            "sprints_per_window":        sprints_per_window,
+            "strong_threshold":          strong_threshold,
+            "moderate_threshold":        moderate_threshold,
+            "needs_attention_threshold": needs_attention_threshold,
+            "conservative_percentile":   conservative_percentile,
+            "trend_lookback":            trend_lookback,
+            "min_sprints_warning":       min_sprints_warning,
+        })
+        st.success("Configuration saved.")
 
 
 # ── Results helpers ────────────────────────────────────────────────────────────
@@ -552,13 +579,13 @@ def page_results():
         st.info("No sprint data yet. Add sprints in the Sprint Data section.")
         return
 
-    unit      = cfg.get("unit_of_work", "Point")
-    col_key   = "completed_points" if unit == "Point" else "completed_issues"
+    unit       = cfg.get("unit_of_work", "Point")
+    col_key    = "completed_points" if unit == "Point" else "completed_issues"
     unit_label = "Points" if unit == "Point" else "Issues"
 
-    active  = [s for s in sprints if not s.get("exclude", False)]
-    values  = [s.get(col_key) or 0 for s in active]
-    labels  = [s.get("sprint_name", f"Sprint {i+1}") for i, s in enumerate(active)]
+    active = [s for s in sprints if not s.get("exclude", False)]
+    values = [s.get(col_key) or 0 for s in active]
+    labels = [s.get("sprint_name", f"Sprint {i+1}") for i, s in enumerate(active)]
 
     if not values:
         st.warning("All sprints are excluded. Uncheck some in Sprint Data to see results.")
@@ -566,12 +593,12 @@ def page_results():
 
     m = compute_predictability(values, cfg)
 
-    rating        = m.get("rating") or "N/A"
-    avg_ratio     = m.get("avg_ratio")
-    most_recent   = m.get("most_recent_ratio")
-    recent_trend  = m.get("recent_trend") or "N/A"
-    smooth_trend  = m.get("smoothed_trend") or "N/A"
-    warning       = m.get("data_volume_warning", "")
+    rating       = m.get("rating") or "N/A"
+    avg_ratio    = m.get("avg_ratio")
+    most_recent  = m.get("most_recent_ratio")
+    recent_trend = m.get("recent_trend") or "N/A"
+    smooth_trend = m.get("smoothed_trend") or "N/A"
+    warning      = m.get("data_volume_warning", "")
 
     # ── Summary cards ─────────────────────────────────────────────────────────
     st.subheader("Summary")
@@ -584,8 +611,8 @@ def page_results():
         f'<div style="font-size:1.5em;font-weight:bold">{rating}</div></div>',
         unsafe_allow_html=True,
     )
-    c2.metric("Avg Ratio",          f"{avg_ratio:.2%}"   if avg_ratio   is not None else "—")
-    c3.metric("Most Recent Ratio",  f"{most_recent:.2%}" if most_recent is not None else "—")
+    c2.metric("Avg Ratio",         f"{avg_ratio:.2%}"   if avg_ratio   is not None else "—")
+    c3.metric("Most Recent Ratio", f"{most_recent:.2%}" if most_recent is not None else "—")
     c4.metric("Recent Trend", f"{TREND_ICONS.get(recent_trend, '—')} {recent_trend}")
 
     if warning and "Warning" in warning:
@@ -636,8 +663,8 @@ The overall rating is based on the **average ratio** across all windows:
         st.divider()
         st.subheader("Predictability Ratio Over Time")
 
-        w_size  = int(cfg.get("sprints_per_window", 5))
-        ratios  = [w["ratio"] for w in windows]
+        w_size = int(cfg.get("sprints_per_window", 5))
+        ratios = [w["ratio"] for w in windows]
 
         if len(labels) >= len(windows):
             x = [labels[i + w_size - 1] for i in range(len(windows))]
@@ -684,14 +711,14 @@ The overall rating is based on the **average ratio** across all windows:
     with col_a:
         st.markdown("**Core Metrics**")
         rows_a = [
-            ("Sprints in analysis",      m["sprints_in_analysis"],        "d"),
-            ("Windows computed",         len(windows),                    "d"),
-            (f"Avg typical {unit_label.lower()}/window", m["avg_typical"], ".1f"),
-            ("Avg conservative floor",   m["avg_conservative"],           ".1f"),
-            ("Avg ratio",                m["avg_ratio"],                  ".2%"),
-            ("Min ratio",                m["min_ratio"],                  ".2%"),
-            ("Max ratio",                m["max_ratio"],                  ".2%"),
-            (f"Std dev of completed {unit_label.lower()}", m["std_dev"],  ".1f"),
+            ("Sprints in analysis",                       m["sprints_in_analysis"], "d"),
+            ("Windows computed",                          len(windows),             "d"),
+            (f"Avg typical {unit_label.lower()}/window",  m["avg_typical"],         ".1f"),
+            ("Avg conservative floor",                    m["avg_conservative"],    ".1f"),
+            ("Avg ratio",                                 m["avg_ratio"],           ".2%"),
+            ("Min ratio",                                 m["min_ratio"],           ".2%"),
+            ("Max ratio",                                 m["max_ratio"],           ".2%"),
+            (f"Std dev of completed {unit_label.lower()}", m["std_dev"],            ".1f"),
         ]
         for label, val, fmt in rows_a:
             if val is not None:
@@ -702,13 +729,13 @@ The overall rating is based on the **average ratio** across all windows:
         st.markdown("**Trend Detail**")
         lookback = cfg.get("trend_lookback", 5)
         rows_b = [
-            ("Most recent window ratio",              m["most_recent_ratio"],   ".2%"),
-            (f"Ratio {lookback} windows ago",         m["ratio_n_periods_ago"], ".2%"),
-            ("Trend delta",                           m["trend_delta"],         "+.2%"),
-            ("Recent trend",                          recent_trend,             None),
-            ("Smoothed recent avg (last 3 windows)",  m["recent_avg_ratio"],    ".2%"),
-            ("Smoothed prior avg (previous 3)",       m["prior_avg_ratio"],     ".2%"),
-            ("Smoothed trend",                        smooth_trend,             None),
+            ("Most recent window ratio",             m["most_recent_ratio"],   ".2%"),
+            (f"Ratio {lookback} windows ago",        m["ratio_n_periods_ago"], ".2%"),
+            ("Trend delta",                          m["trend_delta"],         "+.2%"),
+            ("Recent trend",                         recent_trend,             None),
+            ("Smoothed recent avg (last 3 windows)", m["recent_avg_ratio"],    ".2%"),
+            ("Smoothed prior avg (previous 3)",      m["prior_avg_ratio"],     ".2%"),
+            ("Smoothed trend",                       smooth_trend,             None),
         ]
         for label, val, fmt in rows_b:
             if val is not None:
@@ -721,9 +748,9 @@ The overall rating is based on the **average ratio** across all windows:
         st.subheader("Window Detail")
         wdf = pd.DataFrame(windows)
         wdf.columns = ["Window", f"Typical {unit_label}", "Conservative Floor", "Ratio"]
-        wdf["Ratio"]                     = wdf["Ratio"].map("{:.2%}".format)
-        wdf[f"Typical {unit_label}"]     = wdf[f"Typical {unit_label}"].map("{:.1f}".format)
-        wdf["Conservative Floor"]        = wdf["Conservative Floor"].map("{:.1f}".format)
+        wdf["Ratio"]                 = wdf["Ratio"].map("{:.2%}".format)
+        wdf[f"Typical {unit_label}"] = wdf[f"Typical {unit_label}"].map("{:.1f}".format)
+        wdf["Conservative Floor"]   = wdf["Conservative Floor"].map("{:.1f}".format)
         st.dataframe(wdf, use_container_width=True, hide_index=True)
 
 
@@ -731,16 +758,42 @@ The overall rating is based on the **average ratio** across all windows:
 def show_sidebar():
     with st.sidebar:
         st.write(f"Logged in as **{st.session_state.get('user_email', '')}**")
+        st.divider()
 
-        if st.button("My Teams", use_container_width=True):
-            st.session_state["page"] = "teams"
-            st.session_state.pop("current_team_id",   None)
-            st.session_state.pop("current_team_name", None)
-            st.rerun()
+        # ── Team switcher ──────────────────────────────────────────────────────
+        teams = get_teams()
+        if teams:
+            team_names = [t["name"] for t in teams]
+            team_ids   = [t["id"]   for t in teams]
 
+            current_id  = st.session_state.get("current_team_id")
+            current_idx = team_ids.index(current_id) if current_id in team_ids else 0
+
+            selected_idx = st.selectbox(
+                "Active Team",
+                range(len(team_names)),
+                format_func=lambda i: team_names[i],
+                index=current_idx,
+                key="team_selector",
+            )
+
+            # Switch team if the selection changed
+            if team_ids[selected_idx] != st.session_state.get("current_team_id"):
+                st.session_state["current_team_id"]   = team_ids[selected_idx]
+                st.session_state["current_team_name"] = team_names[selected_idx]
+                # Stay on the current page if it's a team page, otherwise go to Sprint Data
+                if st.session_state.get("page") not in ("sprint_data", "configuration", "results"):
+                    st.session_state["page"] = "sprint_data"
+                st.rerun()
+
+            # Auto-set team on first load if none selected
+            if not st.session_state.get("current_team_id"):
+                st.session_state["current_team_id"]   = team_ids[0]
+                st.session_state["current_team_name"] = team_names[0]
+
+        # ── Page navigation ────────────────────────────────────────────────────
         if st.session_state.get("current_team_id"):
             st.divider()
-            st.caption(f"Team: {st.session_state.get('current_team_name', '')}")
             for label, key in [
                 ("Sprint Data",   "sprint_data"),
                 ("Configuration", "configuration"),
@@ -750,6 +803,25 @@ def show_sidebar():
                     st.session_state["page"] = key
                     st.rerun()
 
+        # ── Manage Teams ───────────────────────────────────────────────────────
+        st.divider()
+        if st.button("Manage Teams", use_container_width=True):
+            st.session_state["page"] = "teams"
+            st.rerun()
+
+        # ── PDF reference guide download ───────────────────────────────────────
+        pdf_path = os.path.join(os.path.dirname(__file__), "Completion_Predictability_Guide.pdf")
+        if os.path.exists(pdf_path):
+            with open(pdf_path, "rb") as f:
+                st.download_button(
+                    "Download Reference Guide",
+                    f.read(),
+                    "Completion_Predictability_Guide.pdf",
+                    "application/pdf",
+                    use_container_width=True,
+                )
+
+        # ── Log out ────────────────────────────────────────────────────────────
         st.divider()
         if st.button("Log Out", use_container_width=True):
             do_logout()
@@ -763,25 +835,34 @@ def main():
             page_login()
             return
 
-    restore_session()
-    show_sidebar()
+    try:
+        restore_session()
+        show_sidebar()
 
-    page    = st.session_state.get("page", "teams")
-    team_id = st.session_state.get("current_team_id")
+        page    = st.session_state.get("page", "teams")
+        team_id = st.session_state.get("current_team_id")
 
-    if page == "teams":
-        page_teams()
-    elif page in ("sprint_data", "configuration", "results") and not team_id:
-        st.warning("Please select a team first.")
-        page_teams()
-    elif page == "sprint_data":
-        page_sprint_data()
-    elif page == "configuration":
-        page_configuration()
-    elif page == "results":
-        page_results()
-    else:
-        page_teams()
+        if page == "teams":
+            page_teams()
+        elif page in ("sprint_data", "configuration", "results") and not team_id:
+            st.warning("Please select a team first.")
+            page_teams()
+        elif page == "sprint_data":
+            page_sprint_data()
+        elif page == "configuration":
+            page_configuration()
+        elif page == "results":
+            page_results()
+        else:
+            page_teams()
+
+    except Exception as e:
+        if is_auth_error(e):
+            clear_session()
+            st.error("Your session has expired. Please log in again.")
+            page_login()
+        else:
+            raise
 
 
 main()
