@@ -83,6 +83,48 @@ def do_logout():
     clear_session()
 
 
+def handle_password_recovery(code: str):
+    st.title("Reset Your Password")
+
+    # Exchange the one-time code for a session on first load only.
+    # Store the result so reruns (e.g. form interactions) don't try to reuse the code.
+    if "recovery_session" not in st.session_state:
+        try:
+            r = get_supabase().auth.exchange_code_for_session({"auth_code": code})
+            st.session_state["recovery_session"] = {
+                "access_token":  r.session.access_token,
+                "refresh_token": r.session.refresh_token,
+            }
+        except Exception:
+            st.error("This reset link is invalid or has already been used. Please request a new one.")
+            if st.button("Back to Login"):
+                st.query_params.clear()
+                st.rerun()
+            return
+
+    with st.form("reset_pw_form"):
+        new_pw     = st.text_input("New Password",         type="password")
+        confirm_pw = st.text_input("Confirm New Password", type="password")
+        if st.form_submit_button("Set New Password", use_container_width=True):
+            if not new_pw:
+                st.warning("Please enter a password.")
+            elif len(new_pw) < 6:
+                st.error("Password must be at least 6 characters.")
+            elif new_pw != confirm_pw:
+                st.error("Passwords do not match.")
+            else:
+                try:
+                    sess = st.session_state["recovery_session"]
+                    get_supabase().auth.set_session(sess["access_token"], sess["refresh_token"])
+                    get_supabase().auth.update_user({"password": new_pw})
+                    st.session_state.pop("recovery_session", None)
+                    st.query_params.clear()
+                    st.success("Password updated. You can now log in.")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Failed to update password: {e}")
+
+
 # ── Database ──────────────────────────────────────────────────────────────────
 def db():
     return get_supabase()
@@ -191,6 +233,19 @@ def page_login():
                 else:
                     st.warning("Please enter your email and password.")
 
+        with st.expander("Forgot your password?"):
+            with st.form("forgot_pw_form"):
+                reset_email = st.text_input("Email address")
+                if st.form_submit_button("Send Reset Email", use_container_width=True):
+                    if reset_email.strip():
+                        try:
+                            get_supabase().auth.reset_password_for_email(reset_email.strip())
+                            st.success("If an account exists with that email, a reset link has been sent.")
+                        except Exception as e:
+                            st.error(f"Failed to send reset email: {e}")
+                    else:
+                        st.warning("Please enter your email address.")
+
     with tab_signup:
         with st.form("signup_form"):
             email    = st.text_input("Email",            key="su_email")
@@ -287,6 +342,12 @@ def page_sprint_data():
     st.title(f"Sprint Data — {team_name}")
 
     sprints = get_sprint_data(team_id)
+
+    if sprints:
+        total    = len(sprints)
+        excluded = sum(1 for s in sprints if s.get("exclude", False))
+        active   = total - excluded
+        st.caption(f"{total} sprints total — {active} active, {excluded} excluded")
 
     tab_data, tab_import = st.tabs(["Sprint Data", "Import CSV"])
 
@@ -504,7 +565,9 @@ def page_configuration():
         help="Show a warning if the sprint count falls below this number.",
     )
 
-    if st.button("Save Configuration", type="primary"):
+    col_save, col_reset = st.columns([3, 1])
+
+    if col_save.button("Save Configuration", type="primary", use_container_width=True):
         save_team_config(team_id, {
             "unit_of_work":              unit_of_work,
             "analysis_mode":             analysis_mode,
@@ -517,6 +580,11 @@ def page_configuration():
             "min_sprints_warning":       min_sprints_warning,
         })
         st.success("Configuration saved.")
+
+    if col_reset.button("Reset to Defaults", use_container_width=True):
+        save_team_config(team_id, {**DEFAULT_CONFIG, "team_id": team_id})
+        st.success("Configuration reset to defaults.")
+        st.rerun()
 
 
 # ── Results helpers ────────────────────────────────────────────────────────────
@@ -600,6 +668,26 @@ def page_results():
         return
 
     m = compute_predictability(values, cfg)
+
+    # Guard: not enough sprints to produce even one window
+    windows_check = m.get("windows", [])
+    if not windows_check:
+        mode   = cfg.get("analysis_mode", "Rolling")
+        w_size = int(cfg.get("sprints_per_window", 5))
+        if mode == "Rolling":
+            needed = w_size - len(values)
+            st.info(
+                f"Not enough data to calculate results yet. "
+                f"You have {len(values)} active sprint(s). "
+                f"Add {needed} more to reach the minimum of {w_size} required for one window."
+            )
+        else:
+            st.info(
+                f"Not enough data to calculate results yet. "
+                f"You have {len(values)} active sprint(s). "
+                f"Add at least 2 sprints to see results in All mode."
+            )
+        return
 
     rating       = m.get("rating") or "N/A"
     avg_ratio    = m.get("avg_ratio")
@@ -839,6 +927,13 @@ def show_sidebar():
 
 # ── Main ───────────────────────────────────────────────────────────────────────
 def main():
+    # Password recovery: Supabase redirects back with ?type=recovery&code=XXX
+    # Handle this before any auth check so unauthenticated users can reset their password.
+    params = st.query_params
+    if params.get("type") == "recovery" and "code" in params:
+        handle_password_recovery(params["code"])
+        return
+
     if not is_authenticated():
         if not restore_session():
             page_login()
