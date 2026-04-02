@@ -689,27 +689,19 @@ def page_results():
         st.warning("All sprints are excluded. Uncheck some in Sprint Data to see results.")
         return
 
-    m = compute_predictability(values, cfg)
-
-    # Guard: not enough sprints to produce even one window
-    windows_check = m.get("windows", [])
-    if not windows_check:
-        mode   = cfg.get("analysis_mode", "Rolling")
-        w_size = int(cfg.get("sprints_per_window", 5))
-        if mode == "Rolling":
-            needed = w_size - len(values)
-            st.info(
-                f"Not enough data to calculate results yet. "
-                f"You have {len(values)} active sprint(s). "
-                f"Add {needed} more to reach the minimum of {w_size} required for one window."
-            )
-        else:
-            st.info(
-                f"Not enough data to calculate results yet. "
-                f"You have {len(values)} active sprint(s). "
-                f"Add at least 2 sprints to see results in All mode."
-            )
+    # Guard: not enough sprints for a full window — check before computing
+    mode   = cfg.get("analysis_mode", "Rolling")
+    w_size = int(cfg.get("sprints_per_window", 5))
+    if mode == "Rolling" and len(values) < w_size:
+        needed = w_size - len(values)
+        st.info(
+            f"Not enough data to calculate results yet. "
+            f"You have {len(values)} active sprint(s). "
+            f"Add {needed} more to reach the minimum of {w_size} required for one window."
+        )
         return
+
+    m = compute_predictability(values, cfg)
 
     rating       = m.get("rating") or "N/A"
     avg_ratio    = m.get("avg_ratio")
