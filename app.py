@@ -50,7 +50,8 @@ def is_authenticated() -> bool:
 
 def is_auth_error(e: Exception) -> bool:
     msg = str(e).lower()
-    return any(k in msg for k in ["jwt", "token", "auth", "session", "expired", "invalid"])
+    return any(k in msg for k in ["jwt expired", "invalid jwt", "token expired",
+                                   "not authenticated", "session expired", "refresh token"])
 
 
 # ── Auth ──────────────────────────────────────────────────────────────────────
@@ -364,7 +365,6 @@ def page_teams():
         if col_open.button("Open", key=f"open_{team['id']}"):
             st.session_state["current_team_id"]   = team["id"]
             st.session_state["current_team_name"] = team["name"]
-            st.session_state["team_selector"]     = i
             st.session_state["page"]              = "sprint_data"
             st.rerun()
 
@@ -954,7 +954,6 @@ def show_sidebar():
                 range(len(team_names)),
                 format_func=lambda i: team_names[i],
                 index=current_idx,
-                key="team_selector",
             )
 
             # Switch team if the ID or name changed (name can change after a rename)
