@@ -30,14 +30,27 @@ header             { visibility: hidden; }
 [data-testid="stSidebar"] * {
     color: #dce3ed !important;
 }
-[data-testid="stSidebar"] .stButton > button {
+[data-testid="stSidebar"] .stButton > button,
+[data-testid="stSidebar"] [data-testid="stDownloadButton"] > button {
     background-color: #2c3e55;
     color: #dce3ed !important;
     border: 1px solid #3d5166;
     border-radius: 6px;
 }
-[data-testid="stSidebar"] .stButton > button:hover {
+[data-testid="stSidebar"] .stButton > button:hover,
+[data-testid="stSidebar"] [data-testid="stDownloadButton"] > button:hover {
     background-color: #3d5166;
+}
+
+/* ── Selectbox dropdown options — white background needs dark text ── */
+[data-baseweb="popover"] li,
+[data-baseweb="popover"] [role="option"] {
+    color: #1e2a3a !important;
+    background-color: #ffffff;
+}
+[data-baseweb="popover"] li:hover,
+[data-baseweb="popover"] [role="option"]:hover {
+    background-color: #f0f4f8 !important;
 }
 
 /* ── Metric cards ── */
