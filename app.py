@@ -837,10 +837,10 @@ def generate_results_pdf(team_name: str, cfg: dict, m: dict, unit_label: str) ->
     from io import BytesIO
     import datetime
     from reportlab.lib import colors
+    from reportlab.lib.colors import HexColor
     from reportlab.lib.pagesizes import letter
     from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
     from reportlab.lib.units import inch
-    from reportlab.lib.utils import HexColor
     from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, HRFlowable
 
     NAVY       = HexColor('#1e2a3a')
