@@ -349,7 +349,7 @@ def page_teams():
             trend_icon = TREND_ICONS.get(summary.get("recent_trend", ""), "—")
             trend_label = summary.get("recent_trend", "—")
             col_name.markdown(
-                f'<span style="background:{color};color:white;padding:2px 7px;'
+                f'Rating: <span style="background:{color};color:white;padding:2px 7px;'
                 f'border-radius:3px;font-size:0.75em;font-weight:bold">{summary["rating"]}</span>'
                 f'&nbsp;&nbsp;Avg ratio: <b>{summary["avg_ratio"]:.0%}</b>'
                 f'&nbsp;&nbsp;Trend: <b>{trend_icon} {trend_label}</b>'
@@ -962,7 +962,7 @@ def show_sidebar():
                 st.session_state["current_team_id"]   = team_ids[selected_idx]
                 st.session_state["current_team_name"] = team_names[selected_idx]
                 # Stay on the current page if it's a team page, otherwise go to Sprint Data
-                if st.session_state.get("page") not in ("sprint_data", "configuration", "results"):
+                if st.session_state.get("page") not in ("sprint_data", "configuration", "results", "teams"):
                     st.session_state["page"] = "sprint_data"
                 st.rerun()
 
