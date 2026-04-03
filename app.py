@@ -13,6 +13,50 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
+st.markdown("""
+<style>
+/* ── Hide Streamlit chrome ── */
+#MainMenu          { visibility: hidden; }
+footer             { visibility: hidden; }
+header             { visibility: hidden; }
+
+/* ── App background ── */
+.stApp { background-color: #f8f9fb; }
+
+/* ── Sidebar ── */
+[data-testid="stSidebar"] {
+    background-color: #1e2a3a;
+}
+[data-testid="stSidebar"] * {
+    color: #dce3ed !important;
+}
+[data-testid="stSidebar"] .stButton > button {
+    background-color: #2c3e55;
+    color: #dce3ed !important;
+    border: 1px solid #3d5166;
+    border-radius: 6px;
+}
+[data-testid="stSidebar"] .stButton > button:hover {
+    background-color: #3d5166;
+}
+
+/* ── Metric cards ── */
+[data-testid="stMetric"] {
+    background-color: #ffffff;
+    border: 1px solid #e2e6ea;
+    border-radius: 8px;
+    padding: 16px 20px;
+}
+
+/* ── Dividers ── */
+hr { border-color: #e2e6ea; }
+
+/* ── Subheaders ── */
+h2 { color: #1e2a3a; }
+h3 { color: #1e2a3a; }
+</style>
+""", unsafe_allow_html=True)
+
 # ── Supabase client (one per browser session) ─────────────────────────────────
 def get_supabase() -> Client:
     if "supabase_client" not in st.session_state:
@@ -784,16 +828,22 @@ def page_results():
     st.subheader("Summary")
     c1, c2, c3, c4 = st.columns(4)
 
+    def summary_card(col, label, value, accent_color="#1e2a3a"):
+        col.markdown(
+            f'<div style="background:#ffffff;border:1px solid #e2e6ea;border-top:4px solid {accent_color};'
+            f'border-radius:8px;padding:16px 20px;text-align:center;">'
+            f'<div style="font-size:0.75em;color:#6c757d;margin-bottom:6px">{label}</div>'
+            f'<div style="font-size:1.4em;font-weight:bold;color:#1e2a3a">{value}</div>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+
     color = RATING_COLORS.get(rating, "#999")
-    c1.markdown(
-        f'<div style="background:{color};padding:18px;border-radius:8px;color:white;text-align:center">'
-        f'<div style="font-size:0.75em;opacity:0.9">Predictability Rating</div>'
-        f'<div style="font-size:1.5em;font-weight:bold">{rating}</div></div>',
-        unsafe_allow_html=True,
-    )
-    c2.metric("Avg Ratio",         f"{avg_ratio:.2%}"   if avg_ratio   is not None else "—")
-    c3.metric("Most Recent Ratio", f"{most_recent:.2%}" if most_recent is not None else "—")
-    c4.metric("Recent Trend", f"{TREND_ICONS.get(recent_trend, '—')} {recent_trend}")
+    summary_card(c1, "Predictability Rating", rating, accent_color=color)
+    summary_card(c2, "Avg Ratio",         f"{avg_ratio:.2%}"   if avg_ratio   is not None else "—")
+    summary_card(c3, "Most Recent Ratio", f"{most_recent:.2%}" if most_recent is not None else "—")
+    trend_display = f"{TREND_ICONS.get(recent_trend, '—')} {recent_trend}"
+    summary_card(c4, "Recent Trend", trend_display)
 
     if warning and "Warning" in warning:
         st.warning(warning)
