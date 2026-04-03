@@ -498,6 +498,19 @@ def page_configuration():
     team_name = st.session_state.get("current_team_name", "Team")
     st.title(f"Configuration — {team_name}")
 
+    # If reset was triggered on the previous run, apply default values to widget
+    # states NOW — before any widgets are rendered — so they initialise correctly.
+    if st.session_state.pop("cfg_reset_pending", False):
+        st.session_state["cfg_unit"]         = "Point"
+        st.session_state["cfg_mode"]         = "Rolling"
+        st.session_state["cfg_window"]       = 5
+        st.session_state["cfg_strong"]       = 0.5
+        st.session_state["cfg_moderate"]     = 0.33
+        st.session_state["cfg_needs"]        = 0.25
+        st.session_state["cfg_conservative"] = 0.15
+        st.session_state["cfg_trend"]        = 5
+        st.session_state["cfg_min_warn"]     = 10
+
     cfg = get_team_config(team_id)
 
     # ── Analysis Settings ─────────────────────────────────────────────────────
@@ -614,16 +627,7 @@ def page_configuration():
 
     if col_reset.button("Reset to Defaults", use_container_width=True):
         save_team_config(team_id, DEFAULT_CONFIG.copy())
-        st.session_state["cfg_unit"]         = "Point"
-        st.session_state["cfg_mode"]         = "Rolling"
-        st.session_state["cfg_window"]       = 5
-        st.session_state["cfg_strong"]       = 0.5
-        st.session_state["cfg_moderate"]     = 0.33
-        st.session_state["cfg_needs"]        = 0.25
-        st.session_state["cfg_conservative"] = 0.15
-        st.session_state["cfg_trend"]        = 5
-        st.session_state["cfg_min_warn"]     = 10
-        st.success("Configuration reset to defaults.")
+        st.session_state["cfg_reset_pending"] = True
         st.rerun()
 
 
