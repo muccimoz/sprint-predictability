@@ -339,7 +339,7 @@ def page_teams():
 
     st.divider()
 
-    for team in teams:
+    for i, team in enumerate(teams):
         col_name, col_open, col_rename, col_delete = st.columns([5, 2, 2, 2])
         col_name.write(f"**{team['name']}**")
 
@@ -364,6 +364,7 @@ def page_teams():
         if col_open.button("Open", key=f"open_{team['id']}"):
             st.session_state["current_team_id"]   = team["id"]
             st.session_state["current_team_name"] = team["name"]
+            st.session_state["team_selector"]     = i
             st.session_state["page"]              = "sprint_data"
             st.rerun()
 
