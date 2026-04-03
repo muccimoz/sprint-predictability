@@ -1496,7 +1496,10 @@ def main():
             return
 
     try:
-        restore_session()
+        if not restore_session():
+            clear_session()
+            page_login()
+            return
         show_sidebar()
 
         page    = st.session_state.get("page", "teams")
