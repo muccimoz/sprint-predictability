@@ -657,6 +657,7 @@ def page_configuration():
 - **Conservative Percentile** — the floor value used in the ratio calculation. Default 15% means the team met or exceeded this level 85% of the time.
 - **Minimum Sprints Warning** — a warning appears on the Results page if active sprint count falls below this number.
 - Click **Reset to Defaults** to restore all settings to their original values.
+- **Sharing** — use the Sharing section at the bottom of this page to generate a shareable link to this team's results. Anyone with the link can view results without logging in. You can disable sharing at any time to invalidate the link.
         """)
 
     # If reset was triggered on the previous run, apply default values to widget
