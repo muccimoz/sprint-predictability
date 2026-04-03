@@ -288,6 +288,35 @@ def page_login():
                         st.success(msg)
 
 
+def get_team_summary(team_id: str) -> dict:
+    """Return rating, avg ratio and trend for a team — used on the dashboard."""
+    try:
+        cfg     = get_team_config(team_id)
+        sprints = get_sprint_data(team_id)
+        unit    = cfg.get("unit_of_work", "Point")
+        col_key = "completed_points" if unit == "Point" else "completed_issues"
+        active  = [s for s in sprints if not s.get("exclude", False)]
+        values  = [s.get(col_key) or 0 for s in active]
+
+        if not values:
+            return {"status": "no_data"}
+
+        w_size = int(cfg.get("sprints_per_window", 5))
+        if cfg.get("analysis_mode", "Rolling") == "Rolling" and len(values) < w_size:
+            return {"status": "insufficient", "count": len(values), "needed": w_size}
+
+        m = compute_predictability(values, cfg)
+        return {
+            "status":       "ok",
+            "rating":       m.get("rating"),
+            "avg_ratio":    m.get("avg_ratio"),
+            "recent_trend": m.get("recent_trend"),
+            "sprint_count": len(active),
+        }
+    except Exception:
+        return {"status": "error"}
+
+
 def page_teams():
     st.title("Your Teams")
 
@@ -313,6 +342,24 @@ def page_teams():
     for team in teams:
         col_name, col_open, col_rename, col_delete = st.columns([5, 2, 2, 2])
         col_name.write(f"**{team['name']}**")
+
+        summary = get_team_summary(team["id"])
+        if summary["status"] == "ok":
+            color      = RATING_COLORS.get(summary["rating"], "#999")
+            trend_icon = TREND_ICONS.get(summary.get("recent_trend", ""), "—")
+            trend_label = summary.get("recent_trend", "—")
+            col_name.markdown(
+                f'<span style="background:{color};color:white;padding:2px 7px;'
+                f'border-radius:3px;font-size:0.75em;font-weight:bold">{summary["rating"]}</span>'
+                f'&nbsp;&nbsp;Avg ratio: <b>{summary["avg_ratio"]:.0%}</b>'
+                f'&nbsp;&nbsp;Trend: <b>{trend_icon} {trend_label}</b>'
+                f'&nbsp;&nbsp;<span style="color:#888;font-size:0.85em">({summary["sprint_count"]} active sprints)</span>',
+                unsafe_allow_html=True,
+            )
+        elif summary["status"] == "insufficient":
+            col_name.caption(f'{summary["count"]} of {summary["needed"]} sprints needed for results')
+        elif summary["status"] == "no_data":
+            col_name.caption("No sprint data yet")
 
         if col_open.button("Open", key=f"open_{team['id']}"):
             st.session_state["current_team_id"]   = team["id"]
