@@ -379,6 +379,8 @@ def get_team_summary(team_id: str) -> dict:
 def page_teams():
     st.title("Your Teams")
 
+    teams = get_teams()
+
     with st.expander("How to use this page"):
         st.markdown("""
 - Each team has its own sprint data, configuration, and results.
