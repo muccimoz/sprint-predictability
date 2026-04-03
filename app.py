@@ -1,4 +1,5 @@
 import os
+import time
 import streamlit as st
 from supabase import create_client, Client
 import pandas as pd
@@ -90,6 +91,14 @@ def restore_session() -> bool:
             st.session_state["access_token"],
             st.session_state["refresh_token"],
         )
+        # Proactively refresh if token expires within 5 minutes
+        expires_at = st.session_state.get("expires_at", 0)
+        if time.time() > expires_at - 300:
+            r = get_supabase().auth.refresh_session()
+            if r and r.session:
+                st.session_state["access_token"]  = r.session.access_token
+                st.session_state["refresh_token"] = r.session.refresh_token
+                st.session_state["expires_at"]    = r.session.expires_at
         return True
     except Exception:
         clear_session()
@@ -97,7 +106,7 @@ def restore_session() -> bool:
 
 
 def clear_session():
-    for key in ["access_token", "refresh_token", "user_id", "user_email",
+    for key in ["access_token", "refresh_token", "expires_at", "user_id", "user_email",
                 "current_team_id", "current_team_name", "page", "supabase_client"]:
         st.session_state.pop(key, None)
 
@@ -118,6 +127,7 @@ def do_login(email: str, password: str):
         r = get_supabase().auth.sign_in_with_password({"email": email, "password": password})
         st.session_state["access_token"]  = r.session.access_token
         st.session_state["refresh_token"] = r.session.refresh_token
+        st.session_state["expires_at"]    = r.session.expires_at
         st.session_state["user_id"]       = r.user.id
         st.session_state["user_email"]    = r.user.email
         st.session_state["page"]          = "teams"
