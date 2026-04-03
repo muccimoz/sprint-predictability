@@ -291,8 +291,8 @@ def import_sprints(team_id: str, df: pd.DataFrame):
 
 # ── Pages ─────────────────────────────────────────────────────────────────────
 def page_login():
-    st.title("Sprint Predictability")
-    st.write("Measure how consistently your team delivers sprint after sprint.")
+    st.title("Measuring Completion Predictability")
+    st.write("Evaluating completion patterns to assess planning confidence.")
     st.divider()
 
     tab_login, tab_signup = st.tabs(["Log In", "Sign Up"])
@@ -379,7 +379,14 @@ def get_team_summary(team_id: str) -> dict:
 def page_teams():
     st.title("Your Teams")
 
-    teams = get_teams()
+    with st.expander("How to use this page"):
+        st.markdown("""
+- Each team has its own sprint data, configuration, and results.
+- Click **Open** to view and manage a team's sprint data and results.
+- The rating, avg ratio, and trend shown here are calculated from each team's current active sprint data.
+- Use **Add New Team** to create a team for each group you want to track separately.
+- Use **Rename** or **Delete** to manage existing teams. Deleting a team removes all its sprint data permanently.
+        """)
 
     with st.expander("Add New Team", expanded=(len(teams) == 0)):
         with st.form("add_team"):
@@ -470,6 +477,16 @@ def page_sprint_data():
     st.title(f"Sprint Data — {team_name}")
 
     sprints = get_sprint_data(team_id)
+
+    with st.expander("How to use this page"):
+        st.markdown("""
+- Add one row per completed sprint. At minimum, provide a sprint name and completed points or issues.
+- **Order** controls the sequence sprints appear in — lower numbers come first. Adjust these to reorder sprints.
+- **Exclude** removes a sprint from calculations without deleting it. Useful for outlier sprints (e.g. holiday weeks, unusual scope changes).
+- Click **Save Changes** after any edits. Unsaved changes are lost if you navigate away.
+- Use the **Import CSV** tab to bulk-load sprint data from a spreadsheet. A template is available to download.
+- You need at least **5 active sprints** (the default window size) before results can be calculated.
+        """)
 
     if sprints:
         total    = len(sprints)
@@ -603,6 +620,17 @@ def page_configuration():
     team_id   = st.session_state["current_team_id"]
     team_name = st.session_state.get("current_team_name", "Team")
     st.title(f"Configuration — {team_name}")
+
+    with st.expander("How to use this page"):
+        st.markdown("""
+- **Unit of Work** — choose Points if your team tracks story points, or Issues if you track ticket counts.
+- **Analysis Mode** — Rolling uses sliding windows of sprints for a more responsive view of trends. All treats every sprint as one group.
+- **Sprints per Window** — how many sprints make up each rolling window. Default is 5. Larger windows are smoother but slower to reflect recent changes.
+- **Rating Thresholds** — the avg predictability ratio is compared against these to assign a rating (Strong, Moderate, Needs Attention, Very Weak). Adjust only if the defaults don't fit your team's context.
+- **Conservative Percentile** — the floor value used in the ratio calculation. Default 15% means the team met or exceeded this level 85% of the time.
+- **Minimum Sprints Warning** — a warning appears on the Results page if active sprint count falls below this number.
+- Click **Reset to Defaults** to restore all settings to their original values.
+        """)
 
     # If reset was triggered on the previous run, apply default values to widget
     # states NOW — before any widgets are rendered — so they initialise correctly.
