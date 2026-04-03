@@ -43,13 +43,14 @@ header             { visibility: hidden; }
 }
 
 /* ── Selectbox dropdown options — white background needs dark text ── */
-[data-baseweb="popover"] li,
-[data-baseweb="popover"] [role="option"] {
+[data-baseweb="popover"] *,
+[data-baseweb="menu"] *,
+[data-baseweb="select"] ul li,
+ul[role="listbox"] li {
     color: #1e2a3a !important;
-    background-color: #ffffff;
 }
 [data-baseweb="popover"] li:hover,
-[data-baseweb="popover"] [role="option"]:hover {
+[data-baseweb="menu"] li:hover {
     background-color: #f0f4f8 !important;
 }
 
