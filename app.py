@@ -1,5 +1,6 @@
 import os
 import time
+import uuid
 import streamlit as st
 from supabase import create_client, Client
 import pandas as pd
@@ -282,6 +283,20 @@ def replace_sprint_data(team_id: str, records: list):
     db().table("sprint_data").delete().eq("team_id", team_id).execute()
     if records:
         db().table("sprint_data").insert(records).execute()
+
+
+def get_team_share_token(team_id: str):
+    r = db().table("teams").select("share_token").eq("id", team_id).execute()
+    return r.data[0]["share_token"] if r.data else None
+
+
+def set_team_share_token(team_id: str, token):
+    db().table("teams").update({"share_token": token}).eq("id", team_id).execute()
+
+
+def get_supabase_public() -> Client:
+    """Fresh unauthenticated Supabase client for public share link access."""
+    return create_client(st.secrets["supabase_url"], st.secrets["supabase_anon_key"])
 
 
 def import_sprints(team_id: str, df: pd.DataFrame):
@@ -775,6 +790,23 @@ def page_configuration():
         save_team_config(team_id, DEFAULT_CONFIG.copy())
         st.session_state["cfg_reset_pending"] = True
         st.rerun()
+
+    # ── Sharing ───────────────────────────────────────────────────────────────
+    st.divider()
+    st.subheader("Sharing")
+    share_token = get_team_share_token(team_id)
+    if share_token:
+        share_url = f"{st.secrets['app_url']}/?share={share_token}"
+        st.success("Sharing is enabled. Anyone with this link can view this team's results.")
+        st.code(share_url, language=None)
+        if st.button("Disable Sharing"):
+            set_team_share_token(team_id, None)
+            st.rerun()
+    else:
+        st.info("Sharing is disabled. Enable it to get a shareable link to this team's results.")
+        if st.button("Enable Sharing"):
+            set_team_share_token(team_id, str(uuid.uuid4()))
+            st.rerun()
 
 
 # ── Results helpers ────────────────────────────────────────────────────────────
@@ -1293,9 +1325,156 @@ def show_sidebar():
 
 
 # ── Main ───────────────────────────────────────────────────────────────────────
+def page_shared_results(token: str):
+    client = get_supabase_public()
+
+    # Look up team by share token
+    r = client.table("teams").select("id, name").eq("share_token", token).execute()
+    if not r.data:
+        st.error("This link is invalid or sharing has been disabled for this team.")
+        return
+
+    team      = r.data[0]
+    team_id   = team["id"]
+    team_name = team["name"]
+
+    st.title(f"Results — {team_name}")
+    st.caption("Shared view — read only")
+    st.divider()
+
+    # Fetch config and sprint data using the public client
+    cfg_r     = client.table("team_config").select("*").eq("team_id", team_id).execute()
+    cfg       = {**DEFAULT_CONFIG, **cfg_r.data[0]} if cfg_r.data else DEFAULT_CONFIG.copy()
+    sprints_r = client.table("sprint_data").select("*").eq("team_id", team_id).execute().data
+    sprints_r.sort(key=lambda s: (
+        s.get("sort_order") is None,
+        s.get("sort_order") or 0,
+        s["sprint_date"] is None,
+        s["sprint_date"] or "",
+        s["created_at"],
+    ))
+
+    unit       = cfg.get("unit_of_work", "Point")
+    col_key    = "completed_points" if unit == "Point" else "completed_issues"
+    unit_label = "Points" if unit == "Point" else "Issues"
+
+    active = [s for s in sprints_r if not s.get("exclude", False)]
+    values = [s.get(col_key) or 0 for s in active]
+    labels = [s.get("sprint_name", f"Sprint {i+1}") for i, s in enumerate(active)]
+
+    if not values:
+        st.info("No sprint data available for this team.")
+        return
+
+    mode   = cfg.get("analysis_mode", "Rolling")
+    w_size = int(cfg.get("sprints_per_window", 5))
+    if mode == "Rolling" and len(values) < w_size:
+        needed = w_size - len(values)
+        st.info(f"Not enough data yet. {len(values)} active sprint(s) — {needed} more needed.")
+        return
+
+    m = compute_predictability(values, cfg)
+
+    rating       = m.get("rating") or "N/A"
+    avg_ratio    = m.get("avg_ratio")
+    most_recent  = m.get("most_recent_ratio")
+    recent_trend = m.get("recent_trend") or "N/A"
+    smooth_trend = m.get("smoothed_trend") or "N/A"
+    warning      = m.get("data_volume_warning", "")
+
+    # Summary cards
+    st.subheader("Summary")
+    c1, c2, c3, c4 = st.columns(4)
+
+    def summary_card(col, label, value, accent_color="#1e2a3a"):
+        col.markdown(
+            f'<div style="background:#ffffff;border:1px solid #e2e6ea;border-top:4px solid {accent_color};'
+            f'border-radius:8px;padding:16px 20px;text-align:center;">'
+            f'<div style="font-size:0.75em;color:#6c757d;margin-bottom:6px">{label}</div>'
+            f'<div style="font-size:1.4em;font-weight:bold;color:#1e2a3a">{value}</div>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+
+    color = RATING_COLORS.get(rating, "#999")
+    summary_card(c1, "Predictability Rating", rating, accent_color=color)
+    summary_card(c2, "Avg Ratio",         f"{avg_ratio:.2%}"   if avg_ratio   is not None else "—")
+    summary_card(c3, "Most Recent Ratio", f"{most_recent:.2%}" if most_recent is not None else "—")
+    summary_card(c4, "Recent Trend",      f"{TREND_ICONS.get(recent_trend, '—')} {recent_trend}")
+
+    if warning and "Warning" in warning:
+        st.warning(warning)
+
+    # What this means
+    st.divider()
+    st.subheader("What This Means")
+    if rating in RATING_EXPLANATIONS:
+        st.markdown(f"**Rating: {rating}**")
+        st.write(RATING_EXPLANATIONS[rating])
+    tt = trend_text(recent_trend, smooth_trend)
+    if tt:
+        st.markdown("**Trend**")
+        st.write(tt)
+
+    # Chart
+    windows = m.get("windows", [])
+    if len(windows) > 1:
+        st.divider()
+        st.subheader("Predictability Ratio Over Time")
+        ratios = [w["ratio"] for w in windows]
+        x      = [f"Window {w['window']}" for w in windows]
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(
+            x=x, y=ratios, mode="lines+markers",
+            name="Predictability Ratio",
+            line=dict(color="#3498db", width=2),
+            marker=dict(size=6),
+        ))
+        for label, val, lcolor in [
+            ("Strong",          cfg.get("strong_threshold", 0.5),          "#2ecc71"),
+            ("Moderate",        cfg.get("moderate_threshold", 0.33),        "#f39c12"),
+            ("Needs Attention", cfg.get("needs_attention_threshold", 0.25), "#e74c3c"),
+        ]:
+            fig.add_hline(y=val, line_dash="dash", line_color=lcolor,
+                          annotation_text=label, annotation_position="right")
+        fig.update_layout(
+            yaxis=dict(tickformat=".0%", range=[0, max(1.05, max(ratios) + 0.05)], title="Ratio"),
+            xaxis=dict(title="Window"),
+            height=400, margin=dict(r=130), legend=dict(orientation="h"),
+        )
+        st.plotly_chart(fig, use_container_width=True)
+
+    # Window detail
+    if windows:
+        st.divider()
+        st.subheader("Window Detail")
+        wdf = pd.DataFrame(windows)
+        wdf.columns = ["Window", f"Typical {unit_label}", "Conservative Floor", "Ratio"]
+        wdf["Ratio"]                 = wdf["Ratio"].map("{:.2%}".format)
+        wdf[f"Typical {unit_label}"] = wdf[f"Typical {unit_label}"].map("{:.1f}".format)
+        wdf["Conservative Floor"]    = wdf["Conservative Floor"].map("{:.1f}".format)
+        st.dataframe(wdf, use_container_width=True, hide_index=True)
+
+    # PDF download
+    st.divider()
+    pdf_bytes = generate_results_pdf(team_name, cfg, m, unit_label)
+    st.download_button(
+        "Download Results as PDF",
+        pdf_bytes,
+        file_name=f"{team_name}_predictability_results.pdf",
+        mime="application/pdf",
+    )
+
+
 def main():
-    # Handle password recovery — token_hash flow is primary (set via email template customisation)
     params = st.query_params
+
+    # Public share link — no login required
+    if "share" in params:
+        page_shared_results(params["share"])
+        return
+
+    # Handle password recovery — token_hash flow is primary (set via email template customisation)
     if params.get("type") == "recovery":
         if "token_hash" in params:
             handle_password_recovery(token_hash=params["token_hash"])
