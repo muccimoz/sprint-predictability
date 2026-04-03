@@ -909,11 +909,7 @@ The overall rating is based on the **average ratio** across all windows:
 
         w_size = int(cfg.get("sprints_per_window", 5))
         ratios = [w["ratio"] for w in windows]
-
-        if len(labels) >= len(windows):
-            x = [labels[i + w_size - 1] for i in range(len(windows))]
-        else:
-            x = [f"Window {w['window']}" for w in windows]
+        x      = [f"Window {w['window']}" for w in windows]
 
         fig = go.Figure()
         fig.add_trace(go.Scatter(
@@ -940,7 +936,7 @@ The overall rating is based on the **average ratio** across all windows:
                 range=[0, max(1.05, max(ratios) + 0.05)],
                 title="Ratio",
             ),
-            xaxis=dict(title="Window End Sprint"),
+            xaxis=dict(title="Window"),
             height=400,
             margin=dict(r=130),
             legend=dict(orientation="h"),
