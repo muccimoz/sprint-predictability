@@ -833,6 +833,192 @@ def trend_text(recent: str, smoothed: str) -> str:
     return " ".join(parts)
 
 
+def generate_results_pdf(team_name: str, cfg: dict, m: dict, unit_label: str) -> bytes:
+    from io import BytesIO
+    import datetime
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import letter
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import inch
+    from reportlab.lib.utils import HexColor
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, HRFlowable
+
+    NAVY       = HexColor('#1e2a3a')
+    LIGHT_GRAY = HexColor('#f8f9fb')
+    MID_GRAY   = HexColor('#6c757d')
+
+    styles = getSampleStyleSheet()
+    title_style   = ParagraphStyle('AppTitle',   parent=styles['Normal'], fontSize=18,
+                                    fontName='Helvetica-Bold', textColor=NAVY, spaceAfter=4)
+    subtitle_style = ParagraphStyle('Subtitle',  parent=styles['Normal'], fontSize=11,
+                                    textColor=MID_GRAY, spaceAfter=2)
+    caption_style  = ParagraphStyle('Caption',   parent=styles['Normal'], fontSize=9,
+                                    textColor=MID_GRAY, spaceAfter=4)
+    heading_style  = ParagraphStyle('Heading',   parent=styles['Normal'], fontSize=13,
+                                    fontName='Helvetica-Bold', textColor=NAVY,
+                                    spaceBefore=12, spaceAfter=6)
+    body_style     = ParagraphStyle('Body',      parent=styles['Normal'], fontSize=10,
+                                    spaceAfter=6)
+
+    RATING_HEX = {
+        "Strong":          HexColor('#2ecc71'),
+        "Moderate":        HexColor('#3498db'),
+        "Needs Attention": HexColor('#f39c12'),
+        "Very Weak":       HexColor('#e74c3c'),
+    }
+
+    rating       = m.get("rating") or "N/A"
+    avg_ratio    = m.get("avg_ratio")
+    most_recent  = m.get("most_recent_ratio")
+    recent_trend = m.get("recent_trend") or "N/A"
+    smooth_trend = m.get("smoothed_trend") or "N/A"
+    trend_icon   = TREND_ICONS.get(recent_trend, "—")
+    rating_color = RATING_HEX.get(rating, HexColor('#999999'))
+
+    buf  = BytesIO()
+    doc  = SimpleDocTemplate(buf, pagesize=letter,
+                              leftMargin=0.75*inch, rightMargin=0.75*inch,
+                              topMargin=0.75*inch,  bottomMargin=0.75*inch)
+    story = []
+
+    # ── Header ────────────────────────────────────────────────────────────────
+    story.append(Paragraph("Sprint Predictability Results", title_style))
+    story.append(Paragraph(f"Team: {team_name}", subtitle_style))
+    story.append(Paragraph(f"Generated: {datetime.date.today().strftime('%B %d, %Y')}", caption_style))
+    story.append(HRFlowable(width='100%', thickness=2, color=NAVY, spaceAfter=12))
+
+    # ── Summary table ─────────────────────────────────────────────────────────
+    story.append(Paragraph("Summary", heading_style))
+    summary_data = [
+        ["Metric",                  "Value"],
+        ["Predictability Rating",   rating],
+        ["Avg Ratio",               f"{avg_ratio:.2%}"   if avg_ratio    is not None else "—"],
+        ["Most Recent Ratio",       f"{most_recent:.2%}" if most_recent  is not None else "—"],
+        ["Recent Trend",            f"{trend_icon} {recent_trend}"],
+    ]
+    sum_tbl = Table(summary_data, colWidths=[3*inch, 4*inch])
+    sum_tbl.setStyle(TableStyle([
+        ('BACKGROUND',  (0, 0), (-1, 0), NAVY),
+        ('TEXTCOLOR',   (0, 0), (-1, 0), colors.white),
+        ('FONTNAME',    (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE',    (0, 0), (-1,-1), 10),
+        ('ROWBACKGROUNDS', (0, 1), (-1,-1), [colors.white, LIGHT_GRAY]),
+        ('GRID',        (0, 0), (-1,-1), 0.5, HexColor('#e2e6ea')),
+        ('TEXTCOLOR',   (1, 1), (1, 1),  rating_color),
+        ('FONTNAME',    (1, 1), (1, 1),  'Helvetica-Bold'),
+        ('PADDING',     (0, 0), (-1,-1), 6),
+    ]))
+    story.append(sum_tbl)
+    story.append(Spacer(1, 8))
+
+    # ── What this means ───────────────────────────────────────────────────────
+    if rating in RATING_EXPLANATIONS:
+        story.append(Paragraph("What This Means", heading_style))
+        story.append(Paragraph(f"<b>Rating: {rating}</b>", body_style))
+        story.append(Paragraph(RATING_EXPLANATIONS[rating], body_style))
+    tt = trend_text(recent_trend, smooth_trend)
+    if tt:
+        story.append(Paragraph("<b>Trend</b>", body_style))
+        story.append(Paragraph(tt, body_style))
+
+    # ── Analysis settings ─────────────────────────────────────────────────────
+    story.append(Paragraph("Analysis Settings", heading_style))
+    mode   = cfg.get("analysis_mode", "Rolling")
+    w_size = cfg.get("sprints_per_window", 5)
+    pct    = int(cfg.get("conservative_percentile", 0.15) * 100)
+    cfg_data = [
+        ["Setting",                  "Value"],
+        ["Unit of Work",             unit_label],
+        ["Analysis Mode",            mode],
+        ["Sprints per Window",       str(w_size) if mode == "Rolling" else "N/A"],
+        ["Conservative Percentile",  f"{pct}th percentile"],
+        ["Sprints in Analysis",      str(m.get("sprints_in_analysis", "—"))],
+        ["Windows Computed",         str(len(m.get("windows", [])))],
+    ]
+    cfg_tbl = Table(cfg_data, colWidths=[3*inch, 4*inch])
+    cfg_tbl.setStyle(TableStyle([
+        ('BACKGROUND',  (0, 0), (-1, 0), NAVY),
+        ('TEXTCOLOR',   (0, 0), (-1, 0), colors.white),
+        ('FONTNAME',    (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE',    (0, 0), (-1,-1), 10),
+        ('ROWBACKGROUNDS', (0, 1), (-1,-1), [colors.white, LIGHT_GRAY]),
+        ('GRID',        (0, 0), (-1,-1), 0.5, HexColor('#e2e6ea')),
+        ('PADDING',     (0, 0), (-1,-1), 6),
+    ]))
+    story.append(cfg_tbl)
+    story.append(Spacer(1, 8))
+
+    # ── Statistical detail ────────────────────────────────────────────────────
+    story.append(Paragraph("Statistical Detail", heading_style))
+    lookback  = cfg.get("trend_lookback", 5)
+    stat_rows = [["Metric", "Value"]]
+    for label, val, fmt in [
+        ("Sprints in analysis",                        m.get("sprints_in_analysis"), "d"),
+        ("Windows computed",                           len(m.get("windows", [])),    "d"),
+        (f"Avg typical {unit_label.lower()}/window",   m.get("avg_typical"),         ".1f"),
+        ("Avg conservative floor",                     m.get("avg_conservative"),    ".1f"),
+        ("Avg ratio",                                  m.get("avg_ratio"),           ".2%"),
+        ("Min ratio",                                  m.get("min_ratio"),           ".2%"),
+        ("Max ratio",                                  m.get("max_ratio"),           ".2%"),
+        (f"Std dev of completed {unit_label.lower()}", m.get("std_dev"),             ".1f"),
+        ("Most recent window ratio",                   m.get("most_recent_ratio"),   ".2%"),
+        (f"Ratio {lookback} windows ago",              m.get("ratio_n_periods_ago"), ".2%"),
+        ("Trend delta",                                m.get("trend_delta"),         "+.2%"),
+        ("Recent trend",                               m.get("recent_trend"),        None),
+        ("Smoothed recent avg (last 3 windows)",       m.get("recent_avg_ratio"),    ".2%"),
+        ("Smoothed prior avg (previous 3)",            m.get("prior_avg_ratio"),     ".2%"),
+        ("Smoothed trend",                             m.get("smoothed_trend"),      None),
+    ]:
+        if val is not None:
+            formatted = str(val) if fmt is None or fmt == "d" else format(val, fmt)
+            stat_rows.append([label, formatted])
+    stat_tbl = Table(stat_rows, colWidths=[4*inch, 3*inch])
+    stat_tbl.setStyle(TableStyle([
+        ('BACKGROUND',  (0, 0), (-1, 0), NAVY),
+        ('TEXTCOLOR',   (0, 0), (-1, 0), colors.white),
+        ('FONTNAME',    (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE',    (0, 0), (-1,-1), 9),
+        ('ROWBACKGROUNDS', (0, 1), (-1,-1), [colors.white, LIGHT_GRAY]),
+        ('GRID',        (0, 0), (-1,-1), 0.5, HexColor('#e2e6ea')),
+        ('PADDING',     (0, 0), (-1,-1), 5),
+    ]))
+    story.append(stat_tbl)
+    story.append(Spacer(1, 8))
+
+    # ── Window detail ─────────────────────────────────────────────────────────
+    windows = m.get("windows", [])
+    if windows:
+        story.append(Paragraph("Window Detail", heading_style))
+        win_rows = [["Window", f"Typical {unit_label}", "Conservative Floor", "Ratio"]]
+        for w in windows:
+            win_rows.append([
+                str(w["window"]),
+                f"{w['typical']:.1f}",
+                f"{w['conservative']:.1f}",
+                f"{w['ratio']:.2%}",
+            ])
+        win_tbl = Table(win_rows, colWidths=[1.5*inch, 2*inch, 2*inch, 1.5*inch])
+        win_tbl.setStyle(TableStyle([
+            ('BACKGROUND',  (0, 0), (-1, 0), NAVY),
+            ('TEXTCOLOR',   (0, 0), (-1, 0), colors.white),
+            ('FONTNAME',    (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE',    (0, 0), (-1,-1), 9),
+            ('ROWBACKGROUNDS', (0, 1), (-1,-1), [colors.white, LIGHT_GRAY]),
+            ('GRID',        (0, 0), (-1,-1), 0.5, HexColor('#e2e6ea')),
+            ('ALIGN',       (0, 0), (-1,-1), 'CENTER'),
+            ('PADDING',     (0, 0), (-1,-1), 5),
+        ]))
+        story.append(win_tbl)
+
+    # ── Footer ────────────────────────────────────────────────────────────────
+    story.append(Spacer(1, 20))
+    story.append(HRFlowable(width='100%', thickness=1, color=HexColor('#e2e6ea')))
+    story.append(Paragraph("Generated by Sprint Predictability App", caption_style))
+
+    doc.build(story)
+    return buf.getvalue()
+
+
 def page_results():
     team_id   = st.session_state["current_team_id"]
     team_name = st.session_state.get("current_team_name", "Team")
@@ -1033,6 +1219,16 @@ The overall rating is based on the **average ratio** across all windows:
         wdf["Conservative Floor"]   = wdf["Conservative Floor"].map("{:.1f}".format)
         st.dataframe(wdf, use_container_width=True, hide_index=True)
 
+    # ── Export ────────────────────────────────────────────────────────────────
+    st.divider()
+    pdf_bytes = generate_results_pdf(team_name, cfg, m, unit_label)
+    st.download_button(
+        "Download Results as PDF",
+        pdf_bytes,
+        file_name=f"{team_name}_predictability_results.pdf",
+        mime="application/pdf",
+    )
+
 
 # ── Sidebar navigation ─────────────────────────────────────────────────────────
 def show_sidebar():
@@ -1088,18 +1284,6 @@ def show_sidebar():
         if st.button("Manage Teams", use_container_width=True):
             st.session_state["page"] = "teams"
             st.rerun()
-
-        # ── PDF reference guide download ───────────────────────────────────────
-        pdf_path = os.path.join(os.path.dirname(__file__), "Completion_Predictability_Guide.pdf")
-        if os.path.exists(pdf_path):
-            with open(pdf_path, "rb") as f:
-                st.download_button(
-                    "Download Reference Guide",
-                    f.read(),
-                    "Completion_Predictability_Guide.pdf",
-                    "application/pdf",
-                    use_container_width=True,
-                )
 
         # ── Log out ────────────────────────────────────────────────────────────
         st.divider()
