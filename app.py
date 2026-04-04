@@ -731,13 +731,7 @@ def page_configuration():
         help="Which column from Sprint Data drives all calculations.",
         key="cfg_unit",
     )
-    analysis_mode = st.selectbox(
-        "Analysis Mode",
-        ["Rolling", "All"],
-        index=0 if cfg.get("analysis_mode", "Rolling") == "Rolling" else 1,
-        help="Rolling uses sliding windows. All treats every sprint as a single group.",
-        key="cfg_mode",
-    )
+    analysis_mode = "Rolling"
 
     # Sprints per Window is only relevant in Rolling mode
     if analysis_mode == "Rolling":
@@ -794,19 +788,14 @@ def page_configuration():
         key="cfg_conservative",
     )
 
-    # Trend Lookback is only meaningful in Rolling mode (All mode = 1 window, no trend)
-    if analysis_mode == "Rolling":
-        trend_lookback = st.number_input(
-            "Trend Lookback (windows)",
-            min_value=1, max_value=20,
-            value=int(cfg.get("trend_lookback", 5)),
-            step=1,
-            help="How many windows back to compare when calculating the trend.",
-            key="cfg_trend",
-        )
-    else:
-        trend_lookback = int(cfg.get("trend_lookback", 5))
-        st.caption("Trend Lookback is not used in All mode — trend analysis requires multiple windows.")
+    trend_lookback = st.number_input(
+        "Trend Lookback (windows)",
+        min_value=1, max_value=20,
+        value=int(cfg.get("trend_lookback", 5)),
+        step=1,
+        help="How many windows back to compare when calculating the trend.",
+        key="cfg_trend",
+    )
 
     min_sprints_warning = st.number_input(
         "Minimum Sprints Warning",
@@ -1301,6 +1290,88 @@ def page_results():
     narrative = generate_narrative(rating, recent_trend, smooth_trend, m, cfg, unit_label)
     st.markdown(narrative)
 
+    # ── Charts ────────────────────────────────────────────────────────────────
+    windows = m.get("windows", [])
+    if len(windows) > 1:
+        x = [f"Window {w['window']}" for w in windows]
+
+        # ── Top: Predictability Ratio per window ──────────────────────────────
+        st.divider()
+        st.subheader("Predictability Ratio per Window")
+
+        ratios   = [w["ratio"] for w in windows]
+
+        fig_top = go.Figure()
+        fig_top.add_trace(go.Scatter(
+            x=x, y=ratios,
+            mode="lines+markers",
+            name="Predictability Ratio",
+            line=dict(color="#3498db", width=2),
+            marker=dict(size=6),
+        ))
+        for label, val, color in [
+            ("Strong",          cfg.get("strong_threshold", 0.5),          "#2ecc71"),
+            ("Moderate",        cfg.get("moderate_threshold", 0.33),        "#f39c12"),
+            ("Needs Attention", cfg.get("needs_attention_threshold", 0.25), "#e74c3c"),
+        ]:
+            fig_top.add_hline(
+                y=val, line_dash="dash", line_color=color,
+                annotation_text=label, annotation_position="right",
+            )
+        fig_top.update_layout(
+            yaxis=dict(
+                tickformat=".0%",
+                range=[0, max(1.05, max(ratios) + 0.05)],
+                title="Ratio",
+            ),
+            xaxis=dict(title="Window"),
+            height=380,
+            margin=dict(r=130),
+            legend=dict(orientation="h"),
+        )
+        st.plotly_chart(fig_top, use_container_width=True)
+
+        # ── Bottom: Typical vs Conservative per window ────────────────────────
+        st.subheader("Typical vs Conservative Completion per Window")
+
+        typicals = [w["typical"]      for w in windows]
+        conservs = [w["conservative"] for w in windows]
+
+        fig_bot = go.Figure()
+        fig_bot.add_trace(go.Scatter(
+            x=x, y=typicals,
+            mode="lines+markers",
+            name="Typical (50th pct)",
+            line=dict(color="#3498db", width=2),
+            marker=dict(size=6),
+        ))
+        fig_bot.add_trace(go.Scatter(
+            x=x, y=conservs,
+            mode="lines+markers",
+            name=f"Conservative ({int(cfg.get('conservative_percentile', 0.15) * 100)}th pct)",
+            line=dict(color="#e74c3c", width=2),
+            marker=dict(size=6),
+        ))
+        # Shaded gap between the two lines
+        fig_bot.add_trace(go.Scatter(
+            x=x + x[::-1],
+            y=typicals + conservs[::-1],
+            fill="toself",
+            fillcolor="rgba(243, 156, 18, 0.15)",
+            line=dict(color="rgba(255,255,255,0)"),
+            hoverinfo="skip",
+            showlegend=True,
+            name="Gap",
+        ))
+        fig_bot.update_layout(
+            yaxis=dict(title=unit_label),
+            xaxis=dict(title="Window"),
+            height=380,
+            margin=dict(r=30),
+            legend=dict(orientation="h"),
+        )
+        st.plotly_chart(fig_bot, use_container_width=True)
+
     # ── How the ratio works ───────────────────────────────────────────────────
     with st.expander("How is the ratio calculated?"):
         pct        = int(cfg.get("conservative_percentile", 0.15) * 100)
@@ -1326,48 +1397,6 @@ The overall rating is based on the **average ratio** across all windows:
 | Needs Attention | ≥ {cfg.get("needs_attention_threshold", 0.25):.0%} |
 | Very Weak | below {cfg.get("needs_attention_threshold", 0.25):.0%} |
         """)
-
-    # ── Chart ─────────────────────────────────────────────────────────────────
-    windows = m.get("windows", [])
-    if len(windows) > 1:
-        st.divider()
-        st.subheader("Predictability Ratio Over Time")
-
-        w_size = int(cfg.get("sprints_per_window", 5))
-        ratios = [w["ratio"] for w in windows]
-        x      = [f"Window {w['window']}" for w in windows]
-
-        fig = go.Figure()
-        fig.add_trace(go.Scatter(
-            x=x, y=ratios,
-            mode="lines+markers",
-            name="Predictability Ratio",
-            line=dict(color="#3498db", width=2),
-            marker=dict(size=6),
-        ))
-
-        for label, val, color in [
-            ("Strong",          cfg.get("strong_threshold", 0.5),          "#2ecc71"),
-            ("Moderate",        cfg.get("moderate_threshold", 0.33),        "#f39c12"),
-            ("Needs Attention", cfg.get("needs_attention_threshold", 0.25), "#e74c3c"),
-        ]:
-            fig.add_hline(
-                y=val, line_dash="dash", line_color=color,
-                annotation_text=label, annotation_position="right",
-            )
-
-        fig.update_layout(
-            yaxis=dict(
-                tickformat=".0%",
-                range=[0, max(1.05, max(ratios) + 0.05)],
-                title="Ratio",
-            ),
-            xaxis=dict(title="Window"),
-            height=400,
-            margin=dict(r=130),
-            legend=dict(orientation="h"),
-        )
-        st.plotly_chart(fig, use_container_width=True)
 
     # ── Statistical detail ────────────────────────────────────────────────────
     st.divider()
