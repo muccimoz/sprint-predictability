@@ -1336,8 +1336,8 @@ def page_results():
         # ── Bottom: Typical vs Conservative per window ────────────────────────
         st.subheader("Typical vs Conservative Completion per Window")
 
-        typicals = [w["typical"]      for w in windows]
-        conservs = [w["conservative"] for w in windows]
+        typicals = [round(w["typical"])      for w in windows]
+        conservs = [round(w["conservative"]) for w in windows]
 
         fig_bot = go.Figure()
         fig_bot.add_trace(go.Scatter(
