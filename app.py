@@ -1,6 +1,7 @@
 import os
 import time
 import uuid
+import httpx
 import streamlit as st
 from supabase import create_client, Client
 import pandas as pd
@@ -84,6 +85,19 @@ def get_supabase() -> Client:
 
 
 # ── Session helpers ────────────────────────────────────────────────────────────
+def _raw_token_refresh(refresh_token: str) -> dict | None:
+    """Call Supabase's auth REST endpoint directly to exchange a refresh token."""
+    try:
+        url  = f"{st.secrets['supabase_url']}/auth/v1/token?grant_type=refresh_token"
+        hdrs = {"apikey": st.secrets["supabase_anon_key"], "Content-Type": "application/json"}
+        resp = httpx.post(url, json={"refresh_token": refresh_token}, headers=hdrs, timeout=10)
+        if resp.status_code == 200:
+            return resp.json()
+    except Exception:
+        pass
+    return None
+
+
 def restore_session() -> bool:
     if not st.session_state.get("access_token"):
         return False
@@ -93,19 +107,18 @@ def restore_session() -> bool:
             st.session_state["refresh_token"],
         )
     except Exception:
-        # Access token is expired — try to exchange the refresh token for a new session
-        try:
+        # Access token is expired — exchange the refresh token via the REST API directly
+        data = _raw_token_refresh(st.session_state.get("refresh_token", ""))
+        if data and data.get("access_token"):
+            st.session_state["access_token"]  = data["access_token"]
+            st.session_state["refresh_token"] = data.get("refresh_token", st.session_state["refresh_token"])
+            st.session_state["expires_at"]    = data.get("expires_at", 0)
             st.session_state.pop("supabase_client", None)   # force a clean client
-            r = get_supabase().auth.refresh_session(st.session_state["refresh_token"])
-            if r and r.session:
-                st.session_state["access_token"]  = r.session.access_token
-                st.session_state["refresh_token"] = r.session.refresh_token
-                st.session_state["expires_at"]    = r.session.expires_at
-                get_supabase().auth.set_session(r.session.access_token, r.session.refresh_token)
-            else:
-                clear_session()
-                return False
-        except Exception:
+            try:
+                get_supabase().auth.set_session(data["access_token"], data.get("refresh_token", ""))
+            except Exception:
+                pass
+        else:
             clear_session()
             return False
     # Proactively refresh if token expires within 5 minutes.
@@ -113,11 +126,13 @@ def restore_session() -> bool:
     try:
         expires_at = st.session_state.get("expires_at", 0)
         if time.time() > expires_at - 300:
-            r = get_supabase().auth.refresh_session()
-            if r and r.session:
-                st.session_state["access_token"]  = r.session.access_token
-                st.session_state["refresh_token"] = r.session.refresh_token
-                st.session_state["expires_at"]    = r.session.expires_at
+            data = _raw_token_refresh(st.session_state.get("refresh_token", ""))
+            if data and data.get("access_token"):
+                st.session_state["access_token"]  = data["access_token"]
+                st.session_state["refresh_token"] = data.get("refresh_token", st.session_state["refresh_token"])
+                st.session_state["expires_at"]    = data.get("expires_at", 0)
+                st.session_state.pop("supabase_client", None)
+                get_supabase().auth.set_session(data["access_token"], data.get("refresh_token", ""))
     except Exception:
         pass
     return True
