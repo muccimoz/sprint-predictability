@@ -1329,7 +1329,7 @@ def page_results():
             height=380,
             margin=dict(r=130, b=100),
             legend=dict(orientation="h", x=0.5, xanchor="center", y=-0.30, yanchor="top",
-                        entrywidth=160, entrywidthmode="pixels"),
+                        ),
         )
         st.plotly_chart(fig_top, use_container_width=True)
 
@@ -1343,14 +1343,14 @@ def page_results():
         fig_bot.add_trace(go.Scatter(
             x=x, y=typicals,
             mode="lines+markers",
-            name="Typical (50th pct)",
+            name="Typical",
             line=dict(color="#3498db", width=2),
             marker=dict(size=6),
         ))
         fig_bot.add_trace(go.Scatter(
             x=x, y=conservs,
             mode="lines+markers",
-            name=f"Conservative ({int(cfg.get('conservative_percentile', 0.15) * 100)}th pct)",
+            name="Conservative",
             line=dict(color="#e74c3c", width=2),
             marker=dict(size=6),
         ))
@@ -1371,7 +1371,7 @@ def page_results():
             height=380,
             margin=dict(r=30, b=100),
             legend=dict(orientation="h", x=0.5, xanchor="center", y=-0.30, yanchor="top",
-                        entrywidth=160, entrywidthmode="pixels"),
+                        ),
         )
         st.plotly_chart(fig_bot, use_container_width=True)
 
