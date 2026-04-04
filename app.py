@@ -1371,42 +1371,41 @@ The overall rating is based on the **average ratio** across all windows:
 
     # ── Statistical detail ────────────────────────────────────────────────────
     st.divider()
-    st.subheader("Statistical Detail")
+    with st.expander("Statistical Detail", expanded=False):
+        col_a, col_b = st.columns(2)
+        with col_a:
+            st.markdown("**Core Metrics**")
+            rows_a = [
+                ("Sprints in analysis",                       m["sprints_in_analysis"], "d"),
+                ("Windows computed",                          len(windows),             "d"),
+                (f"Avg typical {unit_label.lower()}/window",  m["avg_typical"],         ".1f"),
+                ("Avg conservative floor",                    m["avg_conservative"],    ".1f"),
+                ("Avg ratio",                                 m["avg_ratio"],           ".2%"),
+                ("Min ratio",                                 m["min_ratio"],           ".2%"),
+                ("Max ratio",                                 m["max_ratio"],           ".2%"),
+                (f"Std dev of completed {unit_label.lower()}", m["std_dev"],            ".1f"),
+            ]
+            for label, val, fmt in rows_a:
+                if val is not None:
+                    formatted = format(val, fmt) if fmt != "d" else str(val)
+                    st.write(f"{label}: **{formatted}**")
 
-    col_a, col_b = st.columns(2)
-    with col_a:
-        st.markdown("**Core Metrics**")
-        rows_a = [
-            ("Sprints in analysis",                       m["sprints_in_analysis"], "d"),
-            ("Windows computed",                          len(windows),             "d"),
-            (f"Avg typical {unit_label.lower()}/window",  m["avg_typical"],         ".1f"),
-            ("Avg conservative floor",                    m["avg_conservative"],    ".1f"),
-            ("Avg ratio",                                 m["avg_ratio"],           ".2%"),
-            ("Min ratio",                                 m["min_ratio"],           ".2%"),
-            ("Max ratio",                                 m["max_ratio"],           ".2%"),
-            (f"Std dev of completed {unit_label.lower()}", m["std_dev"],            ".1f"),
-        ]
-        for label, val, fmt in rows_a:
-            if val is not None:
-                formatted = format(val, fmt) if fmt != "d" else str(val)
-                st.write(f"{label}: **{formatted}**")
-
-    with col_b:
-        st.markdown("**Trend Detail**")
-        lookback = cfg.get("trend_lookback", 5)
-        rows_b = [
-            ("Most recent window ratio",             m["most_recent_ratio"],   ".2%"),
-            (f"Ratio {lookback} windows ago",        m["ratio_n_periods_ago"], ".2%"),
-            ("Trend delta",                          m["trend_delta"],         "+.2%"),
-            ("Recent trend",                         recent_trend,             None),
-            ("Smoothed recent avg (last 3 windows)", m["recent_avg_ratio"],    ".2%"),
-            ("Smoothed prior avg (previous 3)",      m["prior_avg_ratio"],     ".2%"),
-            ("Smoothed trend",                       smooth_trend,             None),
-        ]
-        for label, val, fmt in rows_b:
-            if val is not None:
-                formatted = format(val, fmt) if fmt else str(val)
-                st.write(f"{label}: **{formatted}**")
+        with col_b:
+            st.markdown("**Trend Detail**")
+            lookback = cfg.get("trend_lookback", 5)
+            rows_b = [
+                ("Most recent window ratio",             m["most_recent_ratio"],   ".2%"),
+                (f"Ratio {lookback} windows ago",        m["ratio_n_periods_ago"], ".2%"),
+                ("Trend delta",                          m["trend_delta"],         "+.2%"),
+                ("Recent trend",                         recent_trend,             None),
+                ("Smoothed recent avg (last 3 windows)", m["recent_avg_ratio"],    ".2%"),
+                ("Smoothed prior avg (previous 3)",      m["prior_avg_ratio"],     ".2%"),
+                ("Smoothed trend",                       smooth_trend,             None),
+            ]
+            for label, val, fmt in rows_b:
+                if val is not None:
+                    formatted = format(val, fmt) if fmt else str(val)
+                    st.write(f"{label}: **{formatted}**")
 
     # ── Window detail table ───────────────────────────────────────────────────
     if windows:
