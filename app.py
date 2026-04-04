@@ -92,7 +92,12 @@ def restore_session() -> bool:
             st.session_state["access_token"],
             st.session_state["refresh_token"],
         )
-        # Proactively refresh if token expires within 5 minutes
+    except Exception:
+        clear_session()
+        return False
+    # Proactively refresh if token expires within 5 minutes.
+    # A failed refresh does NOT end the session — the existing token is still valid.
+    try:
         expires_at = st.session_state.get("expires_at", 0)
         if time.time() > expires_at - 300:
             r = get_supabase().auth.refresh_session()
@@ -100,10 +105,9 @@ def restore_session() -> bool:
                 st.session_state["access_token"]  = r.session.access_token
                 st.session_state["refresh_token"] = r.session.refresh_token
                 st.session_state["expires_at"]    = r.session.expires_at
-        return True
     except Exception:
-        clear_session()
-        return False
+        pass  # Refresh failed but session is still valid — carry on
+    return True
 
 
 def clear_session():
