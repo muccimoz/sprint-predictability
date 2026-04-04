@@ -697,7 +697,6 @@ def page_configuration():
     with st.expander("How to use this page"):
         st.markdown("""
 - **Unit of Work** — choose Points if your team tracks story points, or Issues if you track ticket counts.
-- **Analysis Mode** — Rolling uses sliding windows of sprints for a more responsive view of trends. All treats every sprint as one group.
 - **Sprints per Window** — how many sprints make up each rolling window. Default is 5. Larger windows are smoother but slower to reflect recent changes.
 - **Rating Thresholds** — the avg predictability ratio is compared against these to assign a rating (Strong, Moderate, Needs Attention, Very Weak). Adjust only if the defaults don't fit your team's context.
 - **Conservative Percentile** — the floor value used in the ratio calculation. Default 15% means the team met or exceeded this level 85% of the time.
@@ -1219,6 +1218,20 @@ def page_results():
     team_id   = st.session_state["current_team_id"]
     team_name = st.session_state.get("current_team_name", "Team")
     st.title(f"Results — {team_name}")
+
+    with st.expander("How to use this page"):
+        st.markdown("""
+- The **rating badge** summarises this team's predictability based on the avg ratio across all windows.
+- The **narrative** below the rating interprets the results in plain language — including what the numbers mean and what to watch for.
+- **Avg Ratio** and **Most Recent Ratio** are shown as summary cards. The most recent ratio reflects only the latest rolling window.
+- **Trend** indicates whether predictability is improving, stable, or declining based on recent windows.
+- The **Predictability Ratio per Window** chart shows how the ratio has moved over time. Threshold lines indicate where Strong, Moderate, and Needs Attention begin.
+- The **Typical vs Conservative Completion per Window** chart shows the gap between what the team typically delivers and the conservative floor used in the ratio calculation. A wider gap means lower predictability.
+- **Window Detail** (collapsed) shows the sprint composition and calculated values for each rolling window.
+- **Statistical Detail** (collapsed) shows the underlying percentile values used in the calculation.
+- Use **Download Results as PDF** to export a summary for sharing with stakeholders.
+- Use the **Configuration** page to adjust thresholds, window size, or enable result sharing.
+        """)
 
     sprints = get_sprint_data(team_id)
     cfg     = get_team_config(team_id)
