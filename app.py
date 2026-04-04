@@ -912,6 +912,127 @@ def trend_text(recent: str, smoothed: str) -> str:
     return " ".join(parts)
 
 
+def generate_narrative(rating, recent_trend, smooth_trend, m, cfg, unit_label):
+    """Generate a consultant-style narrative interpretation of the results."""
+    avg_ratio   = m.get("avg_ratio") or 0
+    most_recent = m.get("most_recent_ratio")
+    avg_typical = m.get("avg_typical") or 0
+    avg_conserv = m.get("avg_conservative") or 0
+    min_ratio   = m.get("min_ratio")
+    max_ratio   = m.get("max_ratio")
+    sprints     = m.get("sprints_in_analysis", 0)
+    pct         = int(cfg.get("conservative_percentile", 0.15) * 100)
+    confidence  = 100 - pct
+    unit        = unit_label.lower()
+
+    # Use smoothed trend if available, fall back to recent
+    trend = smooth_trend if smooth_trend not in (None, "Not enough windows") else recent_trend
+
+    paragraphs = []
+
+    # ── Opening ───────────────────────────────────────────────────────────────
+    opening = {
+        "Strong": (
+            f"This team has demonstrated **strong completion predictability** across the analysis period. "
+            f"Based on {sprints} sprints, the average predictability ratio is **{avg_ratio:.0%}**, "
+            f"indicating that conservative and typical completion levels have remained close together."
+        ),
+        "Moderate": (
+            f"This team has shown **moderate completion predictability** across the analysis period. "
+            f"Based on {sprints} sprints, the average predictability ratio is **{avg_ratio:.0%}**, "
+            f"indicating a noticeable but manageable gap between typical and conservative delivery."
+        ),
+        "Needs Attention": (
+            f"This team's completion predictability **requires attention**. "
+            f"Based on {sprints} sprints, the average predictability ratio is **{avg_ratio:.0%}**, "
+            f"indicating a wide gap between what the team typically delivers and what can be reliably counted on."
+        ),
+        "Very Weak": (
+            f"This team's completion predictability is **very weak**. "
+            f"Based on {sprints} sprints, the average predictability ratio is **{avg_ratio:.0%}**, "
+            f"indicating highly variable delivery that makes typical completion an unreliable planning signal."
+        ),
+    }
+    paragraphs.append(opening.get(rating, ""))
+
+    # ── Gap story ─────────────────────────────────────────────────────────────
+    gap = avg_typical - avg_conserv
+    paragraphs.append(
+        f"On a typical window, this team completes around **{avg_typical:.0f} {unit}**. "
+        f"Planning teams can reliably count on approximately **{avg_conserv:.0f} {unit}** — "
+        f"the level met or exceeded {confidence}% of the time. "
+        f"That {gap:.0f}-{unit} gap is what the predictability ratio measures."
+    )
+
+    # ── Trend interpretation ──────────────────────────────────────────────────
+    trend_paras = {
+        ("Strong",         "Improving"):         "The trend is **Improving** — the gap has been narrowing in recent windows, confirmed by both the recent and smoothed trend signals. The team is building on an already strong foundation.",
+        ("Strong",         "Stable"):            "The trend is **Stable** — predictability has been holding steady with no meaningful drift. The team is consistently maintaining its strong performance.",
+        ("Strong",         "Declining"):         "Despite the Strong overall rating, the trend is **Declining** — the predictability gap has been widening in recent windows. The current rating reflects the historical average, but momentum is moving in the wrong direction. This warrants close attention before it affects the rating.",
+        ("Strong",         "Not enough windows"):"There is not yet enough data to determine a trend direction. As more windows accumulate the trend signal will become available.",
+        ("Moderate",       "Improving"):         "The trend is **Improving** — recent windows show the gap narrowing. If this continues, the rating is on track to strengthen. Focus on what is driving the improvement to sustain it.",
+        ("Moderate",       "Stable"):            "The trend is **Stable** — predictability is holding at its current level. While not deteriorating, there is no evidence of improvement. Investigate the primary sources of delivery variation to move the rating upward.",
+        ("Moderate",       "Declining"):         "The trend is **Declining** — the gap has been widening in recent windows. Combined with a Moderate rating, this is a meaningful warning sign. If the trend continues, the rating will fall to Needs Attention.",
+        ("Moderate",       "Not enough windows"):"There is not yet enough data to determine a trend direction. Build up more sprint windows to enable trend analysis.",
+        ("Needs Attention","Improving"):         "The trend is **Improving**, which is an encouraging sign — the gap is narrowing and recent changes may be taking effect. However, the overall rating remains in Needs Attention territory. Sustained improvement across several more windows is needed before planning confidence is restored.",
+        ("Needs Attention","Stable"):            "The trend is **Stable** — predictability is not worsening, but at this rating level, stability without improvement is not sufficient. Active investigation into delivery variability is recommended.",
+        ("Needs Attention","Declining"):         "The trend is **Declining** while the rating is already in Needs Attention territory. This is a high-priority signal. If not addressed, the team is likely to move to a Very Weak rating within the next several windows.",
+        ("Needs Attention","Not enough windows"):"There is not yet enough data to determine a trend direction. Build up more sprint windows while working to reduce delivery variation.",
+        ("Very Weak",      "Improving"):         "The trend is **Improving**, which is a positive early indicator. However, the overall rating remains Very Weak and the gap is still very wide. Sustained improvement over many more windows is required before this translates into a meaningful rating change.",
+        ("Very Weak",      "Stable"):            "The trend is **Stable** — delivery variability is not worsening, but at a Very Weak rating, stability alone is insufficient. The team needs to actively reduce sprint-to-sprint variation before planning confidence can be restored.",
+        ("Very Weak",      "Declining"):         "The trend is **Declining** on top of an already Very Weak rating. This is the most serious combination — delivery variability is high and actively increasing. Typical completion should not be used as a planning input until this pattern reverses.",
+        ("Very Weak",      "Not enough windows"):"There is not yet enough data to determine a trend direction. Add more sprint data and focus on reducing delivery variability.",
+    }
+    trend_para = trend_paras.get((rating, trend), "")
+    if trend_para:
+        paragraphs.append(trend_para)
+
+    # ── Notable observations ──────────────────────────────────────────────────
+    observations = []
+    if most_recent is not None and avg_ratio and most_recent < avg_ratio * 0.85:
+        observations.append(
+            f"The most recent window ratio ({most_recent:.0%}) is notably below the overall average ({avg_ratio:.0%}), "
+            f"suggesting recent performance has weakened."
+        )
+    if most_recent is not None and avg_ratio and most_recent > avg_ratio * 1.10:
+        observations.append(
+            f"The most recent window ratio ({most_recent:.0%}) is above the overall average ({avg_ratio:.0%}), "
+            f"suggesting current performance is stronger than the historical pattern."
+        )
+    if min_ratio is not None and max_ratio is not None and (max_ratio - min_ratio) > 0.40:
+        observations.append(
+            f"The ratio has ranged from {min_ratio:.0%} to {max_ratio:.0%} — a wide spread suggesting "
+            f"predictability has been inconsistent over time, not just recently."
+        )
+    if observations:
+        paragraphs.append("**Notable observations:** " + " ".join(observations))
+
+    # ── Recommendation ────────────────────────────────────────────────────────
+    recommendations = {
+        ("Strong",         "Improving"):         "Continue current practices. Monitor the trend to confirm the improvement is sustained rather than a temporary spike.",
+        ("Strong",         "Stable"):            "Use typical completion with confidence in planning conversations. Continue monitoring the trend for early signs of change.",
+        ("Strong",         "Declining"):         "Do not rely solely on the Strong rating for planning decisions. Investigate what is driving the recent decline before the next planning cycle.",
+        ("Strong",         "Not enough windows"):"Use typical completion with confidence. Build up more sprint windows to enable trend analysis.",
+        ("Moderate",       "Improving"):         "Use typical completion as a directional guide. Focus on sustaining the improvement to move the rating toward Strong.",
+        ("Moderate",       "Stable"):            "Use typical completion cautiously and include a buffer. Identify and address the primary sources of delivery variation.",
+        ("Moderate",       "Declining"):         "Apply additional buffer when using typical completion in planning. Prioritise identifying what is driving the widening gap before commitments are made.",
+        ("Moderate",       "Not enough windows"):"Use typical completion as a rough guide, not a firm commitment. Build up more windows to enable trend analysis.",
+        ("Needs Attention","Improving"):         "Do not rely on typical completion for firm commitments yet. Monitor closely — if improvement continues for several more windows, confidence will begin to return.",
+        ("Needs Attention","Stable"):            "Avoid relying on typical completion in planning. Use conservative completion and additional buffers until the rating improves.",
+        ("Needs Attention","Declining"):         "Use conservative completion rather than typical in all planning conversations. Escalate investigation into delivery variability as a priority.",
+        ("Needs Attention","Not enough windows"):"Avoid relying on typical completion. Build up more sprint windows while working to reduce delivery variation.",
+        ("Very Weak",      "Improving"):         "Do not use typical completion as a planning input yet. Monitor the improving trend closely — sustained recovery over many windows will be needed before confidence returns.",
+        ("Very Weak",      "Stable"):            "Do not use typical completion as a planning input. Focus on stabilising and then improving sprint-to-sprint consistency.",
+        ("Very Weak",      "Declining"):         "Do not use typical completion as a planning input under any circumstances. Treat this as an urgent signal to investigate and address delivery variability before any planning commitments are made.",
+        ("Very Weak",      "Not enough windows"):"Do not use typical completion as a planning input. Add more sprint data and focus on reducing delivery variability.",
+    }
+    rec = recommendations.get((rating, trend), "")
+    if rec:
+        paragraphs.append(f"**Recommendation:** {rec}")
+
+    return "\n\n".join(paragraphs)
+
+
 def generate_results_pdf(team_name: str, cfg: dict, m: dict, unit_label: str) -> bytes:
     from io import BytesIO
     import datetime
@@ -1170,15 +1291,8 @@ def page_results():
     # ── What this means ───────────────────────────────────────────────────────
     st.divider()
     st.subheader("What This Means")
-
-    if rating in RATING_EXPLANATIONS:
-        st.markdown(f"**Rating: {rating}**")
-        st.write(RATING_EXPLANATIONS[rating])
-
-    tt = trend_text(recent_trend, smooth_trend)
-    if tt:
-        st.markdown("**Trend**")
-        st.write(tt)
+    narrative = generate_narrative(rating, recent_trend, smooth_trend, m, cfg, unit_label)
+    st.markdown(narrative)
 
     # ── How the ratio works ───────────────────────────────────────────────────
     with st.expander("How is the ratio calculated?"):
@@ -1290,13 +1404,13 @@ The overall rating is based on the **average ratio** across all windows:
     # ── Window detail table ───────────────────────────────────────────────────
     if windows:
         st.divider()
-        st.subheader("Window Detail")
-        wdf = pd.DataFrame(windows)
-        wdf.columns = ["Window", f"Typical {unit_label}", "Conservative Floor", "Ratio"]
-        wdf["Ratio"]                 = wdf["Ratio"].map("{:.2%}".format)
-        wdf[f"Typical {unit_label}"] = wdf[f"Typical {unit_label}"].map("{:.1f}".format)
-        wdf["Conservative Floor"]   = wdf["Conservative Floor"].map("{:.1f}".format)
-        st.dataframe(wdf, use_container_width=True, hide_index=True)
+        with st.expander("Window Detail", expanded=False):
+            wdf = pd.DataFrame(windows)
+            wdf.columns = ["Window", f"Typical {unit_label}", "Conservative Floor", "Ratio"]
+            wdf["Ratio"]                 = wdf["Ratio"].map("{:.2%}".format)
+            wdf[f"Typical {unit_label}"] = wdf[f"Typical {unit_label}"].map("{:.1f}".format)
+            wdf["Conservative Floor"]   = wdf["Conservative Floor"].map("{:.1f}".format)
+            st.dataframe(wdf, use_container_width=True, hide_index=True)
 
     # ── Export ────────────────────────────────────────────────────────────────
     st.divider()
