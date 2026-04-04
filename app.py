@@ -93,8 +93,10 @@ def _raw_token_refresh(refresh_token: str) -> dict | None:
         resp = httpx.post(url, json={"refresh_token": refresh_token}, headers=hdrs, timeout=10)
         if resp.status_code == 200:
             return resp.json()
-    except Exception:
-        pass
+        # Capture non-200 response for debugging
+        st.session_state["debug_refresh_detail"] = f"HTTP {resp.status_code}: {resp.text[:300]}"
+    except Exception as e:
+        st.session_state["debug_refresh_detail"] = f"Exception: {str(e)[:300]}"
     return None
 
 
@@ -354,8 +356,11 @@ def page_login():
 
     # ── Temporary debug message ───────────────────────────────────────────────
     reason = st.session_state.pop("debug_logout_reason", None)
+    detail = st.session_state.pop("debug_refresh_detail", None)
     if reason:
         st.warning(f"DEBUG: {reason}")
+    if detail:
+        st.warning(f"DEBUG DETAIL: {detail}")
 
     tab_login, tab_signup = st.tabs(["Log In", "Sign Up"])
 
