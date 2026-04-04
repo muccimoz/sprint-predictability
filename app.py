@@ -138,7 +138,7 @@ def restore_session() -> bool:
     # A failed proactive refresh does NOT end the session — carry on with the existing token.
     try:
         expires_at = st.session_state.get("expires_at", 0)
-        if time.time() > expires_at - 300:
+        if time.time() > expires_at - 3500:  # TEMP: change back to 300 after testing
             data = _raw_token_refresh(st.session_state.get("refresh_token", ""))
             if data and data.get("access_token"):
                 st.session_state["access_token"]  = data["access_token"]
