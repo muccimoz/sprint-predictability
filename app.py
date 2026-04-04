@@ -1328,7 +1328,8 @@ def page_results():
             xaxis=dict(title="Window"),
             height=380,
             margin=dict(r=130, b=100),
-            legend=dict(orientation="h", x=0.5, xanchor="center", y=-0.30, yanchor="top"),
+            legend=dict(orientation="h", x=0.5, xanchor="center", y=-0.30, yanchor="top",
+                        entrywidth=160, entrywidthmode="pixels"),
         )
         st.plotly_chart(fig_top, use_container_width=True)
 
@@ -1369,7 +1370,8 @@ def page_results():
             xaxis=dict(title="Window"),
             height=380,
             margin=dict(r=30, b=100),
-            legend=dict(orientation="h", x=0.5, xanchor="center", y=-0.30, yanchor="top"),
+            legend=dict(orientation="h", x=0.5, xanchor="center", y=-0.30, yanchor="top",
+                        entrywidth=160, entrywidthmode="pixels"),
         )
         st.plotly_chart(fig_bot, use_container_width=True)
 
