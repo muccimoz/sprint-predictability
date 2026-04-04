@@ -138,7 +138,7 @@ def restore_session() -> bool:
     # A failed proactive refresh does NOT end the session — carry on with the existing token.
     try:
         expires_at = st.session_state.get("expires_at", 0)
-        if time.time() > expires_at - 3500:  # TEMP: change back to 300 after testing
+        if time.time() > expires_at - 300:
             data = _raw_token_refresh(st.session_state.get("refresh_token", ""))
             if data and data.get("access_token"):
                 st.session_state["access_token"]  = data["access_token"]
@@ -365,13 +365,6 @@ def page_login():
     st.write("Evaluating completion patterns to assess planning confidence.")
     st.divider()
 
-    # ── Temporary debug message ───────────────────────────────────────────────
-    reason = st.session_state.pop("debug_logout_reason", None)
-    detail = st.session_state.pop("debug_refresh_detail", None)
-    if reason:
-        st.warning(f"DEBUG: {reason}")
-    if detail:
-        st.warning(f"DEBUG DETAIL: {detail}")
 
     tab_login, tab_signup = st.tabs(["Log In", "Sign Up"])
 
@@ -1544,15 +1537,12 @@ def main():
             return
 
     if not is_authenticated():
-        if not st.session_state.get("access_token"):
-            st.session_state["debug_logout_reason"] = "SESSION STATE EMPTY — Streamlit connection was reset (no token in memory)"
         if not restore_session():
             page_login()
             return
 
     try:
         if not restore_session():
-            st.session_state["debug_logout_reason"] = "TOKEN REFRESH FAILED — token was present but could not be refreshed"
             clear_session()
             page_login()
             return
