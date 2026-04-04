@@ -100,6 +100,17 @@ def _raw_token_refresh(refresh_token: str) -> dict | None:
     return None
 
 
+def _parse_expires_at(data: dict) -> float:
+    """Return a Unix timestamp for token expiry from a Supabase token response.
+    Supabase REST API returns expires_in (seconds) not always expires_at (timestamp),
+    so we calculate it if expires_at is missing or zero."""
+    expires_at = data.get("expires_at")
+    if expires_at:
+        return float(expires_at)
+    expires_in = data.get("expires_in", 3600)
+    return time.time() + float(expires_in)
+
+
 def restore_session() -> bool:
     if not st.session_state.get("access_token"):
         return False
@@ -114,7 +125,7 @@ def restore_session() -> bool:
         if data and data.get("access_token"):
             st.session_state["access_token"]  = data["access_token"]
             st.session_state["refresh_token"] = data.get("refresh_token", st.session_state["refresh_token"])
-            st.session_state["expires_at"]    = data.get("expires_at", 0)
+            st.session_state["expires_at"]    = _parse_expires_at(data)
             st.session_state.pop("supabase_client", None)   # force a clean client
             try:
                 get_supabase().auth.set_session(data["access_token"], data.get("refresh_token", ""))
@@ -123,7 +134,7 @@ def restore_session() -> bool:
         else:
             clear_session()
             return False
-    # Proactively refresh if token expires within 5 minutes.
+    # Proactively refresh only if token expires within 5 minutes.
     # A failed proactive refresh does NOT end the session — carry on with the existing token.
     try:
         expires_at = st.session_state.get("expires_at", 0)
@@ -132,7 +143,7 @@ def restore_session() -> bool:
             if data and data.get("access_token"):
                 st.session_state["access_token"]  = data["access_token"]
                 st.session_state["refresh_token"] = data.get("refresh_token", st.session_state["refresh_token"])
-                st.session_state["expires_at"]    = data.get("expires_at", 0)
+                st.session_state["expires_at"]    = _parse_expires_at(data)
                 st.session_state.pop("supabase_client", None)
                 get_supabase().auth.set_session(data["access_token"], data.get("refresh_token", ""))
     except Exception:
