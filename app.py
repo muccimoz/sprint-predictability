@@ -352,6 +352,11 @@ def page_login():
     st.write("Evaluating completion patterns to assess planning confidence.")
     st.divider()
 
+    # ── Temporary debug message ───────────────────────────────────────────────
+    reason = st.session_state.pop("debug_logout_reason", None)
+    if reason:
+        st.warning(f"DEBUG: {reason}")
+
     tab_login, tab_signup = st.tabs(["Log In", "Sign Up"])
 
     with tab_login:
@@ -1523,12 +1528,15 @@ def main():
             return
 
     if not is_authenticated():
+        if not st.session_state.get("access_token"):
+            st.session_state["debug_logout_reason"] = "SESSION STATE EMPTY — Streamlit connection was reset (no token in memory)"
         if not restore_session():
             page_login()
             return
 
     try:
         if not restore_session():
+            st.session_state["debug_logout_reason"] = "TOKEN REFRESH FAILED — token was present but could not be refreshed"
             clear_session()
             page_login()
             return
