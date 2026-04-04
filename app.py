@@ -926,7 +926,11 @@ def generate_narrative(rating, recent_trend, smooth_trend, m, cfg, unit_label):
     unit        = unit_label.lower()
 
     # Use smoothed trend if available, fall back to recent
-    trend = smooth_trend if smooth_trend not in (None, "Not enough windows") else recent_trend
+    # Use the more pessimistic of the two trend signals so the narrative
+    # never contradicts the summary card which shows recent_trend.
+    trend_priority = {"Declining": 0, "Stable": 1, "Improving": 2, "Not enough windows": 3}
+    candidates = [t for t in (recent_trend, smooth_trend) if t not in (None, "Not enough windows")]
+    trend = min(candidates, key=lambda t: trend_priority.get(t, 3)) if candidates else "Not enough windows"
 
     paragraphs = []
 
@@ -961,7 +965,7 @@ def generate_narrative(rating, recent_trend, smooth_trend, m, cfg, unit_label):
     gap = rounded_typical - rounded_conserv
     paragraphs.append(
         f"On a typical window, this team completes around **{rounded_typical} {unit}**. "
-        f"Planning teams can reliably count on approximately **{rounded_conserv} {unit}** — "
+        f"Teams can reliably count on approximately **{rounded_conserv} {unit}** — "
         f"the level met or exceeded {confidence}% of the time. "
         f"That {gap}-{unit} gap is what the predictability ratio measures."
     )
@@ -1003,8 +1007,8 @@ def generate_narrative(rating, recent_trend, smooth_trend, m, cfg, unit_label):
         )
     if min_ratio is not None and max_ratio is not None and (max_ratio - min_ratio) > 0.40:
         observations.append(
-            f"The ratio has ranged from {min_ratio:.0%} to {max_ratio:.0%} — a wide spread suggesting "
-            f"predictability has been inconsistent over time, not just recently."
+            f"The ratio across all windows has ranged from a low of {min_ratio:.0%} to a high of {max_ratio:.0%} — "
+            f"a wide spread suggesting predictability has been inconsistent over time, not just recently."
         )
     if observations:
         paragraphs.append("**Notable observations:** " + " ".join(observations))
