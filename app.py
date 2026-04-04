@@ -978,7 +978,7 @@ def generate_narrative(rating, recent_trend, smooth_trend, m, cfg, unit_label):
         ("Strong",         "Not enough windows"):"There is not yet enough data to determine a trend direction. As more windows accumulate the trend signal will become available.",
         ("Moderate",       "Improving"):         "The trend is **Improving** — recent windows show the gap narrowing. If this continues, the rating is on track to strengthen. Focus on what is driving the improvement to sustain it.",
         ("Moderate",       "Stable"):            "The trend is **Stable** — predictability is holding at its current level. While not deteriorating, there is no evidence of improvement. Investigate the primary sources of delivery variation to move the rating upward.",
-        ("Moderate",       "Declining"):         "The trend is **Declining** — the gap has been widening in recent windows. Combined with a Moderate rating, this is a meaningful warning sign. If the trend continues, the rating will fall to Needs Attention.",
+        ("Moderate",       "Declining"):         "The recent trend is Declining — the gap has been widening in recent windows. Combined with a Moderate rating, this is a meaningful warning sign. If the trend continues, the rating will fall to Needs Attention.",
         ("Moderate",       "Not enough windows"):"There is not yet enough data to determine a trend direction. Build up more sprint windows to enable trend analysis.",
         ("Needs Attention","Improving"):         "The trend is **Improving**, which is an encouraging sign — the gap is narrowing and recent changes may be taking effect. However, the overall rating remains in Needs Attention territory. Sustained improvement across several more windows is needed before planning confidence is restored.",
         ("Needs Attention","Stable"):            "The trend is **Stable** — predictability is not worsening, but at this rating level, stability without improvement is not sufficient. Active investigation into delivery variability is recommended.",
@@ -1007,7 +1007,7 @@ def generate_narrative(rating, recent_trend, smooth_trend, m, cfg, unit_label):
         )
     if min_ratio is not None and max_ratio is not None and (max_ratio - min_ratio) > 0.40:
         observations.append(
-            f"The ratio across all windows has ranged from a low of {min_ratio:.0%} to a high of {max_ratio:.0%} — "
+            f"The ratio across the analysis period has ranged from a low of {min_ratio:.0%} to a high of {max_ratio:.0%} — "
             f"a wide spread suggesting predictability has been inconsistent over time, not just recently."
         )
     if observations:
