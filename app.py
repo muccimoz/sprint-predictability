@@ -1308,6 +1308,7 @@ def page_results():
             name="Predictability Ratio",
             line=dict(color="#3498db", width=2),
             marker=dict(size=6),
+            showlegend=True,
         ))
         for label, val, color in [
             ("Strong",          cfg.get("strong_threshold", 0.5),          "#2ecc71"),
