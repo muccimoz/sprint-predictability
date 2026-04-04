@@ -1346,6 +1346,12 @@ def show_sidebar():
                 st.session_state["current_team_id"]   = team_ids[0]
                 st.session_state["current_team_name"] = team_names[0]
 
+        # ── Manage Teams ───────────────────────────────────────────────────────
+        st.divider()
+        if st.button("Manage Teams", use_container_width=True):
+            st.session_state["page"] = "teams"
+            st.rerun()
+
         # ── Page navigation ────────────────────────────────────────────────────
         if st.session_state.get("current_team_id"):
             st.divider()
@@ -1358,11 +1364,19 @@ def show_sidebar():
                     st.session_state["page"] = key
                     st.rerun()
 
-        # ── Manage Teams ───────────────────────────────────────────────────────
+        # ── Reference Guide download ───────────────────────────────────────────
         st.divider()
-        if st.button("Manage Teams", use_container_width=True):
-            st.session_state["page"] = "teams"
-            st.rerun()
+        try:
+            with open("Completion_Predictability_Guide.pdf", "rb") as f:
+                st.download_button(
+                    "Reference Guide",
+                    f.read(),
+                    file_name="Completion_Predictability_Guide.pdf",
+                    mime="application/pdf",
+                    use_container_width=True,
+                )
+        except FileNotFoundError:
+            pass
 
         # ── Log out ────────────────────────────────────────────────────────────
         st.divider()
