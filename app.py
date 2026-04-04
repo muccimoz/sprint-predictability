@@ -956,12 +956,14 @@ def generate_narrative(rating, recent_trend, smooth_trend, m, cfg, unit_label):
     paragraphs.append(opening.get(rating, ""))
 
     # ── Gap story ─────────────────────────────────────────────────────────────
-    gap = avg_typical - avg_conserv
+    rounded_typical = round(avg_typical)
+    rounded_conserv = round(avg_conserv)
+    gap = rounded_typical - rounded_conserv
     paragraphs.append(
-        f"On a typical window, this team completes around **{avg_typical:.0f} {unit}**. "
-        f"Planning teams can reliably count on approximately **{avg_conserv:.0f} {unit}** — "
+        f"On a typical window, this team completes around **{rounded_typical} {unit}**. "
+        f"Planning teams can reliably count on approximately **{rounded_conserv} {unit}** — "
         f"the level met or exceeded {confidence}% of the time. "
-        f"That {gap:.0f}-{unit} gap is what the predictability ratio measures."
+        f"That {gap}-{unit} gap is what the predictability ratio measures."
     )
 
     # ── Trend interpretation ──────────────────────────────────────────────────
@@ -1280,8 +1282,8 @@ def page_results():
 
     color = RATING_COLORS.get(rating, "#999")
     summary_card(c1, "Predictability Rating", rating, accent_color=color)
-    summary_card(c2, "Avg Ratio",         f"{avg_ratio:.2%}"   if avg_ratio   is not None else "—")
-    summary_card(c3, "Most Recent Ratio", f"{most_recent:.2%}" if most_recent is not None else "—")
+    summary_card(c2, "Avg Ratio",         f"{avg_ratio:.0%}"   if avg_ratio   is not None else "—")
+    summary_card(c3, "Most Recent Ratio", f"{most_recent:.0%}" if most_recent is not None else "—")
     trend_display = f"{TREND_ICONS.get(recent_trend, '—')} {recent_trend}"
     summary_card(c4, "Recent Trend", trend_display)
 
@@ -1573,8 +1575,8 @@ def page_shared_results(token: str):
 
     color = RATING_COLORS.get(rating, "#999")
     summary_card(c1, "Predictability Rating", rating, accent_color=color)
-    summary_card(c2, "Avg Ratio",         f"{avg_ratio:.2%}"   if avg_ratio   is not None else "—")
-    summary_card(c3, "Most Recent Ratio", f"{most_recent:.2%}" if most_recent is not None else "—")
+    summary_card(c2, "Avg Ratio",         f"{avg_ratio:.0%}"   if avg_ratio   is not None else "—")
+    summary_card(c3, "Most Recent Ratio", f"{most_recent:.0%}" if most_recent is not None else "—")
     summary_card(c4, "Recent Trend",      f"{TREND_ICONS.get(recent_trend, '—')} {recent_trend}")
 
     if warning and "Warning" in warning:
