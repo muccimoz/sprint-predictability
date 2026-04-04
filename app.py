@@ -1005,7 +1005,8 @@ def generate_narrative(rating, recent_trend, smooth_trend, m, cfg, unit_label):
             f"The most recent window ratio ({most_recent:.0%}) is above the overall average ({avg_ratio:.0%}), "
             f"suggesting current performance is stronger than the historical pattern."
         )
-    if min_ratio is not None and max_ratio is not None and (max_ratio - min_ratio) > 0.40:
+    if (min_ratio is not None and max_ratio is not None and (max_ratio - min_ratio) > 0.40
+            and not (rating == "Strong" and trend == "Improving")):
         observations.append(
             f"The ratio across the analysis period has ranged from a low of {min_ratio:.0%} to a high of {max_ratio:.0%} — "
             f"a wide spread suggesting predictability has been inconsistent over time, not just recently."
