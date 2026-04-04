@@ -171,9 +171,13 @@ def is_auth_error(e: Exception) -> bool:
 def do_login(email: str, password: str):
     try:
         r = get_supabase().auth.sign_in_with_password({"email": email, "password": password})
+        expires_at = r.session.expires_at
+        if not expires_at:
+            expires_in = getattr(r.session, "expires_in", 3600) or 3600
+            expires_at = time.time() + expires_in
         st.session_state["access_token"]  = r.session.access_token
         st.session_state["refresh_token"] = r.session.refresh_token
-        st.session_state["expires_at"]    = r.session.expires_at
+        st.session_state["expires_at"]    = expires_at
         st.session_state["user_id"]       = r.user.id
         st.session_state["user_email"]    = r.user.email
         st.session_state["page"]          = "teams"
