@@ -1314,7 +1314,7 @@ For each rolling window of **{w_size} sprints**:
 - **Conservative floor** = the {pct}th percentile — the team met or exceeded this level {confidence}% of the time
 - **Ratio** = conservative floor ÷ typical delivery
 
-A ratio of **0.80** means you can reliably count on 80% of what this team typically delivers.
+For example, a ratio of **0.80** means you can reliably count on 80% of what this team typically delivers.
 A ratio of **0.30** means delivery is highly variable — you can only reliably count on 30%.
 
 The overall rating is based on the **average ratio** across all windows:
