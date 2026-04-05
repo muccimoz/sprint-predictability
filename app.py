@@ -785,9 +785,6 @@ def page_configuration():
         st.session_state["cfg_unit"]         = cfg.get("unit_of_work", DEFAULT_CONFIG["unit_of_work"])
         st.session_state["cfg_mode"]         = cfg.get("analysis_mode", DEFAULT_CONFIG["analysis_mode"])
         st.session_state["cfg_window"]       = int(cfg.get("sprints_per_window", DEFAULT_CONFIG["sprints_per_window"]))
-        st.session_state["cfg_strong"]       = float(cfg.get("strong_threshold", DEFAULT_CONFIG["strong_threshold"]))
-        st.session_state["cfg_moderate"]     = float(cfg.get("moderate_threshold", DEFAULT_CONFIG["moderate_threshold"]))
-        st.session_state["cfg_needs"]        = float(cfg.get("needs_attention_threshold", DEFAULT_CONFIG["needs_attention_threshold"]))
         st.session_state["cfg_conservative"] = float(cfg.get("conservative_percentile", DEFAULT_CONFIG["conservative_percentile"]))
         st.session_state["cfg_trend"]        = int(cfg.get("trend_lookback", DEFAULT_CONFIG["trend_lookback"]))
         st.session_state["cfg_min_warn"]     = int(cfg.get("min_sprints_warning", DEFAULT_CONFIG["min_sprints_warning"]))
@@ -828,7 +825,6 @@ def page_configuration():
         value=float(cfg.get("strong_threshold", DEFAULT_CONFIG["strong_threshold"])),
         step=0.01, format="%.2f",
         help="Ratio at or above this = Strong.",
-        key="cfg_strong",
     )
     moderate_threshold = st.number_input(
         "Moderate Threshold",
@@ -836,7 +832,6 @@ def page_configuration():
         value=float(cfg.get("moderate_threshold", DEFAULT_CONFIG["moderate_threshold"])),
         step=0.01, format="%.2f",
         help="Ratio at or above this (and below Strong) = Moderate.",
-        key="cfg_moderate",
     )
     needs_attention_threshold = st.number_input(
         "Needs Attention Threshold",
@@ -844,7 +839,6 @@ def page_configuration():
         value=float(cfg.get("needs_attention_threshold", DEFAULT_CONFIG["needs_attention_threshold"])),
         step=0.01, format="%.2f",
         help="Ratio at or above this (and below Moderate) = Needs Attention. Below this = Very Weak.",
-        key="cfg_needs",
     )
 
     # ── Advanced Settings ─────────────────────────────────────────────────────
