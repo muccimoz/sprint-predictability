@@ -201,13 +201,13 @@ def is_auth_error(e: Exception) -> bool:
 def do_login(email: str, password: str):
     try:
         r = get_supabase().auth.sign_in_with_password({"email": email, "password": password})
-        st.session_state["access_token"]  = r.session.access_token
-        st.session_state["refresh_token"] = r.session.refresh_token
-        st.session_state["expires_at"]    = time.time() + 3600
-        st.session_state["user_id"]       = r.user.id
-        st.session_state["user_email"]    = r.user.email
-        st.session_state["page"]          = "teams"
-        save_tokens_to_cookies()
+        st.session_state["access_token"]       = r.session.access_token
+        st.session_state["refresh_token"]      = r.session.refresh_token
+        st.session_state["expires_at"]         = time.time() + 3600
+        st.session_state["user_id"]            = r.user.id
+        st.session_state["user_email"]         = r.user.email
+        st.session_state["page"]               = "teams"
+        st.session_state["_pending_cookie_save"] = True
         return None
     except Exception as e:
         return str(e)
@@ -1728,6 +1728,11 @@ def main():
     # read/write browser cookies. Store in session state so helpers can access it.
     cm = stx.CookieManager(key="cookie_manager")
     st.session_state["_cm"] = cm
+
+    # If login just succeeded, save tokens to cookies now (deferred from login run
+    # to avoid st.rerun() discarding the component render before it reaches the browser).
+    if st.session_state.pop("_pending_cookie_save", False):
+        save_tokens_to_cookies()
 
     params = st.query_params
 
