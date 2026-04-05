@@ -777,18 +777,14 @@ def page_configuration():
 
     cfg = get_team_config(team_id)
 
-    # Force widget keys to current team's values whenever the team changes
-    # or when a reset was triggered — must happen before any widgets render.
-    team_changed = st.session_state.get("cfg_last_team_id") != team_id
-    if team_changed or st.session_state.pop("cfg_reset_pending", False):
-        st.session_state["cfg_last_team_id"] = team_id
-        st.session_state["cfg_unit"]         = cfg.get("unit_of_work", DEFAULT_CONFIG["unit_of_work"])
-        st.session_state["cfg_mode"]         = cfg.get("analysis_mode", DEFAULT_CONFIG["analysis_mode"])
-        st.session_state["cfg_window"]       = int(cfg.get("sprints_per_window", DEFAULT_CONFIG["sprints_per_window"]))
-        st.session_state["cfg_conservative"] = float(cfg.get("conservative_percentile", DEFAULT_CONFIG["conservative_percentile"]))
-        st.session_state["cfg_trend"]        = int(cfg.get("trend_lookback", DEFAULT_CONFIG["trend_lookback"]))
-        st.session_state["cfg_min_warn"]     = int(cfg.get("min_sprints_warning", DEFAULT_CONFIG["min_sprints_warning"]))
-        # Clear team-scoped threshold keys so they reinitialise from cfg on next render
+    # Apply reset values before widgets render — must happen before any widgets are created.
+    if st.session_state.pop("cfg_reset_pending", False):
+        st.session_state["cfg_unit"]         = DEFAULT_CONFIG["unit_of_work"]
+        st.session_state["cfg_mode"]         = DEFAULT_CONFIG["analysis_mode"]
+        st.session_state["cfg_window"]       = DEFAULT_CONFIG["sprints_per_window"]
+        st.session_state["cfg_conservative"] = DEFAULT_CONFIG["conservative_percentile"]
+        st.session_state["cfg_trend"]        = DEFAULT_CONFIG["trend_lookback"]
+        st.session_state["cfg_min_warn"]     = DEFAULT_CONFIG["min_sprints_warning"]
         st.session_state.pop(f"cfg_strong_{team_id}", None)
         st.session_state.pop(f"cfg_moderate_{team_id}", None)
         st.session_state.pop(f"cfg_needs_{team_id}", None)
