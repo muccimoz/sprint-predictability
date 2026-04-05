@@ -576,8 +576,11 @@ def page_teams():
                     update_team(team["id"], new_name.strip())
                     if st.session_state.get("current_team_id") == team["id"]:
                         st.session_state["current_team_name"] = new_name.strip()
-                st.session_state.pop(f"renaming_{team['id']}", None)
-                st.rerun()
+                    st.session_state.pop(f"renaming_{team['id']}", None)
+                    st.success(f"Team renamed to '{new_name.strip()}'.")
+                    st.rerun()
+                else:
+                    st.warning("Please enter a team name.")
             if cancelled:
                 st.session_state.pop(f"renaming_{team['id']}", None)
                 st.rerun()
@@ -746,6 +749,9 @@ def page_configuration():
     team_name = st.session_state.get("current_team_name", "Team")
     st.title(f"Configuration — {team_name}")
 
+    if st.session_state.pop("cfg_reset_success", False):
+        st.success("Configuration reset to defaults.")
+
     with st.expander("How to use this page"):
         st.markdown("""
 - **Unit of Work** — choose Points if your team tracks story points, or Issues if you track ticket counts.
@@ -876,6 +882,7 @@ def page_configuration():
     if col_reset.button("Reset to Defaults", use_container_width=True):
         save_team_config(team_id, DEFAULT_CONFIG.copy())
         st.session_state["cfg_reset_pending"] = True
+        st.session_state["cfg_reset_success"] = True
         st.rerun()
 
     # ── Sharing ───────────────────────────────────────────────────────────────
