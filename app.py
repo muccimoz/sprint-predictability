@@ -788,6 +788,10 @@ def page_configuration():
         st.session_state["cfg_conservative"] = float(cfg.get("conservative_percentile", DEFAULT_CONFIG["conservative_percentile"]))
         st.session_state["cfg_trend"]        = int(cfg.get("trend_lookback", DEFAULT_CONFIG["trend_lookback"]))
         st.session_state["cfg_min_warn"]     = int(cfg.get("min_sprints_warning", DEFAULT_CONFIG["min_sprints_warning"]))
+        # Clear team-scoped threshold keys so they reinitialise from cfg on next render
+        st.session_state.pop(f"cfg_strong_{team_id}", None)
+        st.session_state.pop(f"cfg_moderate_{team_id}", None)
+        st.session_state.pop(f"cfg_needs_{team_id}", None)
 
     # ── Analysis Settings ─────────────────────────────────────────────────────
     st.subheader("Analysis Settings")
@@ -825,6 +829,7 @@ def page_configuration():
         value=float(cfg.get("strong_threshold", DEFAULT_CONFIG["strong_threshold"])),
         step=0.01, format="%.2f",
         help="Ratio at or above this = Strong.",
+        key=f"cfg_strong_{team_id}",
     )
     moderate_threshold = st.number_input(
         "Moderate Threshold",
@@ -832,6 +837,7 @@ def page_configuration():
         value=float(cfg.get("moderate_threshold", DEFAULT_CONFIG["moderate_threshold"])),
         step=0.01, format="%.2f",
         help="Ratio at or above this (and below Strong) = Moderate.",
+        key=f"cfg_moderate_{team_id}",
     )
     needs_attention_threshold = st.number_input(
         "Needs Attention Threshold",
@@ -839,6 +845,7 @@ def page_configuration():
         value=float(cfg.get("needs_attention_threshold", DEFAULT_CONFIG["needs_attention_threshold"])),
         step=0.01, format="%.2f",
         help="Ratio at or above this (and below Moderate) = Needs Attention. Below this = Very Weak.",
+        key=f"cfg_needs_{team_id}",
     )
 
     # ── Advanced Settings ─────────────────────────────────────────────────────
