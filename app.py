@@ -167,6 +167,12 @@ def load_server_session(sid: str) -> bool:
             st.session_state["refresh_token"] = row["refresh_token"]
             st.session_state["user_id"]       = row["user_id"]
             st.session_state["session_id"]    = sid
+            if row.get("current_page"):
+                st.session_state["page"] = row["current_page"]
+            if row.get("current_team_id"):
+                st.session_state["current_team_id"] = row["current_team_id"]
+            if row.get("current_team_name"):
+                st.session_state["current_team_name"] = row["current_team_name"]
             return True
         return False
     except Exception:
@@ -179,8 +185,11 @@ def update_server_session():
         return
     try:
         db().table("user_sessions").update({
-            "access_token":  st.session_state["access_token"],
-            "refresh_token": st.session_state["refresh_token"],
+            "access_token":      st.session_state["access_token"],
+            "refresh_token":     st.session_state["refresh_token"],
+            "current_page":      st.session_state.get("page", "teams"),
+            "current_team_id":   st.session_state.get("current_team_id"),
+            "current_team_name": st.session_state.get("current_team_name"),
         }).eq("id", sid).execute()
     except Exception:
         pass
@@ -1781,6 +1790,7 @@ def main():
             clear_session()
             page_login()
             return
+        update_server_session()
         show_sidebar()
 
         page    = st.session_state.get("page", "teams")
