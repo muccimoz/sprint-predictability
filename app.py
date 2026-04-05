@@ -123,6 +123,7 @@ def restore_session() -> bool:
             st.session_state["access_token"]  = data["access_token"]
             st.session_state["refresh_token"] = data.get("refresh_token", st.session_state["refresh_token"])
             st.session_state.pop("supabase_client", None)
+            update_server_session()
             try:
                 get_supabase().auth.set_session(data["access_token"], data.get("refresh_token", ""))
             except Exception:
@@ -134,9 +135,65 @@ def restore_session() -> bool:
 
 
 def clear_session():
+    try:
+        if "sid" in st.query_params:
+            del st.query_params["sid"]
+    except Exception:
+        pass
     for key in ["access_token", "refresh_token", "expires_at", "user_id", "user_email",
-                "current_team_id", "current_team_name", "page", "supabase_client"]:
+                "current_team_id", "current_team_name", "page", "supabase_client", "session_id"]:
         st.session_state.pop(key, None)
+
+
+# ── Server-side session store (browser-refresh persistence) ───────────────────
+def create_server_session() -> str | None:
+    try:
+        result = db().table("user_sessions").insert({
+            "user_id":       st.session_state["user_id"],
+            "access_token":  st.session_state["access_token"],
+            "refresh_token": st.session_state["refresh_token"],
+        }).execute()
+        return result.data[0]["id"]
+    except Exception:
+        return None
+
+
+def load_server_session(sid: str) -> bool:
+    try:
+        result = get_supabase().table("user_sessions").select("*").eq("id", sid).execute()
+        if result.data:
+            row = result.data[0]
+            st.session_state["access_token"]  = row["access_token"]
+            st.session_state["refresh_token"] = row["refresh_token"]
+            st.session_state["user_id"]       = row["user_id"]
+            st.session_state["session_id"]    = sid
+            return True
+        return False
+    except Exception:
+        return False
+
+
+def update_server_session():
+    sid = st.session_state.get("session_id")
+    if not sid:
+        return
+    try:
+        db().table("user_sessions").update({
+            "access_token":  st.session_state["access_token"],
+            "refresh_token": st.session_state["refresh_token"],
+        }).eq("id", sid).execute()
+    except Exception:
+        pass
+
+
+def delete_server_session():
+    sid = st.session_state.get("session_id")
+    if not sid:
+        return
+    try:
+        db().table("user_sessions").delete().eq("id", sid).execute()
+    except Exception:
+        pass
 
 
 def is_authenticated() -> bool:
@@ -153,12 +210,16 @@ def is_auth_error(e: Exception) -> bool:
 def do_login(email: str, password: str):
     try:
         r = get_supabase().auth.sign_in_with_password({"email": email, "password": password})
-        st.session_state["access_token"]       = r.session.access_token
-        st.session_state["refresh_token"]      = r.session.refresh_token
-        st.session_state["expires_at"]         = time.time() + 3600
-        st.session_state["user_id"]            = r.user.id
-        st.session_state["user_email"]         = r.user.email
+        st.session_state["access_token"]  = r.session.access_token
+        st.session_state["refresh_token"] = r.session.refresh_token
+        st.session_state["expires_at"]    = time.time() + 3600
+        st.session_state["user_id"]       = r.user.id
+        st.session_state["user_email"]    = r.user.email
         st.session_state["page"]          = "teams"
+        sid = create_server_session()
+        if sid:
+            st.session_state["session_id"] = sid
+            st.query_params["sid"] = sid
         return None
     except Exception as e:
         return str(e)
@@ -177,6 +238,7 @@ def do_logout():
         get_supabase().auth.sign_out()
     except Exception:
         pass
+    delete_server_session()
     clear_session()
 
 
@@ -1698,7 +1760,19 @@ def main():
             return
 
     if not is_authenticated():
-        if not restore_session():
+        sid = params.get("sid")
+        if sid:
+            # Browser was refreshed — restore session from server-side store
+            if not load_server_session(sid):
+                # Session record gone (expired or logged out elsewhere)
+                try:
+                    del st.query_params["sid"]
+                except Exception:
+                    pass
+                page_login()
+                return
+            # Tokens restored — fall through to restore_session() below
+        elif not restore_session():
             page_login()
             return
 
