@@ -823,7 +823,7 @@ def page_configuration():
     strong_threshold = st.number_input(
         "Strong Threshold",
         min_value=0.0, max_value=1.0,
-        value=float(cfg.get("strong_threshold", 0.5)),
+        value=float(cfg.get("strong_threshold", DEFAULT_CONFIG["strong_threshold"])),
         step=0.01, format="%.2f",
         help="Ratio at or above this = Strong.",
         key="cfg_strong",
@@ -831,7 +831,7 @@ def page_configuration():
     moderate_threshold = st.number_input(
         "Moderate Threshold",
         min_value=0.0, max_value=1.0,
-        value=float(cfg.get("moderate_threshold", 0.33)),
+        value=float(cfg.get("moderate_threshold", DEFAULT_CONFIG["moderate_threshold"])),
         step=0.01, format="%.2f",
         help="Ratio at or above this (and below Strong) = Moderate.",
         key="cfg_moderate",
@@ -839,7 +839,7 @@ def page_configuration():
     needs_attention_threshold = st.number_input(
         "Needs Attention Threshold",
         min_value=0.0, max_value=1.0,
-        value=float(cfg.get("needs_attention_threshold", 0.25)),
+        value=float(cfg.get("needs_attention_threshold", DEFAULT_CONFIG["needs_attention_threshold"])),
         step=0.01, format="%.2f",
         help="Ratio at or above this (and below Moderate) = Needs Attention. Below this = Very Weak.",
         key="cfg_needs",
