@@ -1752,20 +1752,26 @@ def main():
             return
 
     if not is_authenticated():
-        cookie_status = try_restore_from_cookies(cm)
-        if cookie_status != "restored":
-            # Always retry at least twice — get_all() may return {} on first render
-            # before the component has had a chance to read browser cookies
+        if not st.session_state.get("_cookie_checked"):
+            cookie_status = try_restore_from_cookies(cm)
             retries = st.session_state.get("_cookie_retries", 0)
-            if retries < 2:
+            if cookie_status == "restored":
+                # Tokens found in cookies — fall through to restore_session()
+                st.session_state["_cookie_checked"] = True
+                st.session_state.pop("_cookie_retries", None)
+            elif retries < 2:
+                # Component may not have loaded yet — give it more time
                 st.session_state["_cookie_retries"] = retries + 1
                 st.rerun()
             else:
+                # No cookies after retries — show login
+                st.session_state["_cookie_checked"] = True
                 st.session_state.pop("_cookie_retries", None)
                 page_login()
                 return
-        # "restored" — session state now has tokens, fall through to restore_session()
-        st.session_state.pop("_cookie_retries", None)
+        else:
+            page_login()
+            return
 
     try:
         if not restore_session():
