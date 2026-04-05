@@ -101,14 +101,10 @@ def _raw_token_refresh(refresh_token: str) -> dict | None:
 
 
 def _parse_expires_at(data: dict) -> float:
-    """Return a Unix timestamp for token expiry from a Supabase token response.
-    Supabase REST API returns expires_in (seconds) not always expires_at (timestamp),
-    so we calculate it if expires_at is missing or zero."""
-    expires_at = data.get("expires_at")
-    if expires_at:
-        return float(expires_at)
+    """Always compute expires_at from expires_in to avoid trusting a potentially
+    wrong expires_at value in the Supabase REST response."""
     expires_in = data.get("expires_in", 3600)
-    return time.time() + float(expires_in)
+    return time.time() + float(expires_in or 3600)
 
 
 def restore_session() -> bool:
