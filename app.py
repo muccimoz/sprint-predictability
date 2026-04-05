@@ -716,12 +716,11 @@ def page_sprint_data():
                 import_df = pd.read_csv(uploaded)
                 import_df.columns = [c.strip().lower().replace(" ", "_") for c in import_df.columns]
 
-                if "sprint_name" not in import_df.columns:
-                    st.error("CSV must include a 'sprint_name' column.")
+                required_cols = ["sprint_name", "sprint_date", "completed_points", "completed_issues"]
+                missing_cols = [col for col in required_cols if col not in import_df.columns]
+                if missing_cols:
+                    st.error(f"CSV is missing required column(s): {', '.join(missing_cols)}. Please use the template.")
                 else:
-                    for col in ["sprint_date", "completed_points", "completed_issues"]:
-                        if col not in import_df.columns:
-                            import_df[col] = None
                     if "exclude" not in import_df.columns:
                         import_df["exclude"] = False
 
