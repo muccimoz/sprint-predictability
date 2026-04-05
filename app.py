@@ -109,7 +109,6 @@ def _parse_expires_at(data: dict) -> float:
 
 def restore_session() -> bool:
     if not st.session_state.get("access_token"):
-        st.warning("DEBUG: SESSION STATE EMPTY — tokens not found. Streamlit connection likely dropped.")
         return False
     try:
         get_supabase().auth.set_session(
@@ -122,31 +121,14 @@ def restore_session() -> bool:
         if data and data.get("access_token"):
             st.session_state["access_token"]  = data["access_token"]
             st.session_state["refresh_token"] = data.get("refresh_token", st.session_state["refresh_token"])
-            st.session_state["expires_at"]    = _parse_expires_at(data)
-            st.session_state.pop("supabase_client", None)   # force a clean client
+            st.session_state.pop("supabase_client", None)
             try:
                 get_supabase().auth.set_session(data["access_token"], data.get("refresh_token", ""))
             except Exception:
                 pass
         else:
-            detail = st.session_state.pop("debug_refresh_detail", "no detail")
-            st.warning(f"DEBUG: TOKEN REFRESH FAILED — {detail}")
             clear_session()
             return False
-    # Proactively refresh only if token expires within 5 minutes.
-    # A failed proactive refresh does NOT end the session — carry on with the existing token.
-    try:
-        expires_at = st.session_state.get("expires_at", 0)
-        if time.time() > expires_at - 300:
-            data = _raw_token_refresh(st.session_state.get("refresh_token", ""))
-            if data and data.get("access_token"):
-                st.session_state["access_token"]  = data["access_token"]
-                st.session_state["refresh_token"] = data.get("refresh_token", st.session_state["refresh_token"])
-                st.session_state["expires_at"]    = _parse_expires_at(data)
-                st.session_state.pop("supabase_client", None)
-                get_supabase().auth.set_session(data["access_token"], data.get("refresh_token", ""))
-    except Exception:
-        pass
     return True
 
 
