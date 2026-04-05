@@ -779,15 +779,15 @@ def page_configuration():
 
     # Apply reset values before widgets render — must happen before any widgets are created.
     if st.session_state.pop("cfg_reset_pending", False):
-        st.session_state["cfg_unit"]         = DEFAULT_CONFIG["unit_of_work"]
-        st.session_state["cfg_mode"]         = DEFAULT_CONFIG["analysis_mode"]
-        st.session_state["cfg_window"]       = DEFAULT_CONFIG["sprints_per_window"]
-        st.session_state["cfg_conservative"] = DEFAULT_CONFIG["conservative_percentile"]
-        st.session_state["cfg_trend"]        = DEFAULT_CONFIG["trend_lookback"]
-        st.session_state["cfg_min_warn"]     = DEFAULT_CONFIG["min_sprints_warning"]
-        st.session_state.pop(f"cfg_strong_{team_id}", None)
-        st.session_state.pop(f"cfg_moderate_{team_id}", None)
-        st.session_state.pop(f"cfg_needs_{team_id}", None)
+        st.session_state["cfg_unit"]                      = DEFAULT_CONFIG["unit_of_work"]
+        st.session_state["cfg_mode"]                      = DEFAULT_CONFIG["analysis_mode"]
+        st.session_state["cfg_window"]                    = DEFAULT_CONFIG["sprints_per_window"]
+        st.session_state["cfg_conservative"]              = DEFAULT_CONFIG["conservative_percentile"]
+        st.session_state["cfg_trend"]                     = DEFAULT_CONFIG["trend_lookback"]
+        st.session_state["cfg_min_warn"]                  = DEFAULT_CONFIG["min_sprints_warning"]
+        st.session_state[f"cfg_strong_{team_id}"]         = DEFAULT_CONFIG["strong_threshold"]
+        st.session_state[f"cfg_moderate_{team_id}"]       = DEFAULT_CONFIG["moderate_threshold"]
+        st.session_state[f"cfg_needs_{team_id}"]          = DEFAULT_CONFIG["needs_attention_threshold"]
 
     # ── Analysis Settings ─────────────────────────────────────────────────────
     st.subheader("Analysis Settings")
