@@ -3,6 +3,8 @@ import time
 import uuid
 import httpx
 import streamlit as st
+import extra_streamlit_components as stx
+from datetime import datetime, timedelta
 from supabase import create_client, Client
 import pandas as pd
 import numpy as np
@@ -100,6 +102,51 @@ def _raw_token_refresh(refresh_token: str) -> dict | None:
     return None
 
 
+# ── Cookie helpers ────────────────────────────────────────────────────────────
+_COOKIE_AT = "pc_at"
+_COOKIE_RT = "pc_rt"
+
+
+def save_tokens_to_cookies():
+    cm = st.session_state.get("_cm")
+    if not cm:
+        return
+    try:
+        expires = datetime.now() + timedelta(days=30)
+        cm.set(_COOKIE_AT, st.session_state["access_token"],  expires_at=expires)
+        cm.set(_COOKIE_RT, st.session_state["refresh_token"], expires_at=expires)
+    except Exception:
+        pass
+
+
+def clear_cookies():
+    cm = st.session_state.get("_cm")
+    if not cm:
+        return
+    try:
+        cm.delete(_COOKIE_AT)
+        cm.delete(_COOKIE_RT)
+    except Exception:
+        pass
+
+
+def try_restore_from_cookies(cm) -> str:
+    """Returns 'restored', 'loading', or 'empty'."""
+    try:
+        all_cookies = cm.get_all()
+        if all_cookies is None:
+            return "loading"   # Component hasn't sent cookie data yet
+        at = all_cookies.get(_COOKIE_AT)
+        rt = all_cookies.get(_COOKIE_RT)
+        if at and rt:
+            st.session_state["access_token"]  = at
+            st.session_state["refresh_token"] = rt
+            return "restored"
+        return "empty"
+    except Exception:
+        return "empty"
+
+
 def _parse_expires_at(data: dict) -> float:
     """Always compute expires_at from expires_in to avoid trusting a potentially
     wrong expires_at value in the Supabase REST response."""
@@ -122,6 +169,7 @@ def restore_session() -> bool:
             st.session_state["access_token"]  = data["access_token"]
             st.session_state["refresh_token"] = data.get("refresh_token", st.session_state["refresh_token"])
             st.session_state.pop("supabase_client", None)
+            save_tokens_to_cookies()   # Update cookies with the refreshed tokens
             try:
                 get_supabase().auth.set_session(data["access_token"], data.get("refresh_token", ""))
             except Exception:
@@ -133,6 +181,7 @@ def restore_session() -> bool:
 
 
 def clear_session():
+    clear_cookies()
     for key in ["access_token", "refresh_token", "expires_at", "user_id", "user_email",
                 "current_team_id", "current_team_name", "page", "supabase_client"]:
         st.session_state.pop(key, None)
@@ -158,6 +207,7 @@ def do_login(email: str, password: str):
         st.session_state["user_id"]       = r.user.id
         st.session_state["user_email"]    = r.user.email
         st.session_state["page"]          = "teams"
+        save_tokens_to_cookies()
         return None
     except Exception as e:
         return str(e)
@@ -1674,6 +1724,11 @@ def page_shared_results(token: str):
 
 
 def main():
+    # CookieManager must be created on every run so its component renders and can
+    # read/write browser cookies. Store in session state so helpers can access it.
+    cm = stx.CookieManager(key="cookie_manager")
+    st.session_state["_cm"] = cm
+
     params = st.query_params
 
     # Public share link — no login required
@@ -1697,9 +1752,23 @@ def main():
             return
 
     if not is_authenticated():
-        if not restore_session():
+        cookie_status = try_restore_from_cookies(cm)
+        if cookie_status == "loading":
+            # Component hasn't sent cookie data yet — rerun once to let it load
+            retries = st.session_state.get("_cookie_retries", 0)
+            if retries < 2:
+                st.session_state["_cookie_retries"] = retries + 1
+                st.rerun()
+            else:
+                st.session_state.pop("_cookie_retries", None)
+                page_login()
+                return
+        elif cookie_status == "empty":
+            st.session_state.pop("_cookie_retries", None)
             page_login()
             return
+        # "restored" — session state now has tokens, fall through to restore_session()
+        st.session_state.pop("_cookie_retries", None)
 
     try:
         if not restore_session():
