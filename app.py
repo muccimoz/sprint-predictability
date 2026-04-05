@@ -113,6 +113,7 @@ def _parse_expires_at(data: dict) -> float:
 
 def restore_session() -> bool:
     if not st.session_state.get("access_token"):
+        st.warning("DEBUG: SESSION STATE EMPTY — tokens not found. Streamlit connection likely dropped.")
         return False
     try:
         get_supabase().auth.set_session(
@@ -132,6 +133,8 @@ def restore_session() -> bool:
             except Exception:
                 pass
         else:
+            detail = st.session_state.pop("debug_refresh_detail", "no detail")
+            st.warning(f"DEBUG: TOKEN REFRESH FAILED — {detail}")
             clear_session()
             return False
     # Proactively refresh only if token expires within 5 minutes.
