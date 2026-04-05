@@ -775,20 +775,22 @@ def page_configuration():
 - **Sharing** — use the Sharing section at the bottom of this page to generate a shareable link to this team's results. Anyone with the link can view results without logging in. You can disable sharing at any time to invalidate the link.
         """)
 
-    # If reset was triggered on the previous run, apply default values to widget
-    # states NOW — before any widgets are rendered — so they initialise correctly.
-    if st.session_state.pop("cfg_reset_pending", False):
-        st.session_state["cfg_unit"]         = "Point"
-        st.session_state["cfg_mode"]         = "Rolling"
-        st.session_state["cfg_window"]       = 5
-        st.session_state["cfg_strong"]       = 0.80
-        st.session_state["cfg_moderate"]     = 0.65
-        st.session_state["cfg_needs"]        = 0.50
-        st.session_state["cfg_conservative"] = 0.15
-        st.session_state["cfg_trend"]        = 5
-        st.session_state["cfg_min_warn"]     = 10
-
     cfg = get_team_config(team_id)
+
+    # Force widget keys to current team's values whenever the team changes
+    # or when a reset was triggered — must happen before any widgets render.
+    team_changed = st.session_state.get("cfg_last_team_id") != team_id
+    if team_changed or st.session_state.pop("cfg_reset_pending", False):
+        st.session_state["cfg_last_team_id"] = team_id
+        st.session_state["cfg_unit"]         = cfg.get("unit_of_work", DEFAULT_CONFIG["unit_of_work"])
+        st.session_state["cfg_mode"]         = cfg.get("analysis_mode", DEFAULT_CONFIG["analysis_mode"])
+        st.session_state["cfg_window"]       = int(cfg.get("sprints_per_window", DEFAULT_CONFIG["sprints_per_window"]))
+        st.session_state["cfg_strong"]       = float(cfg.get("strong_threshold", DEFAULT_CONFIG["strong_threshold"]))
+        st.session_state["cfg_moderate"]     = float(cfg.get("moderate_threshold", DEFAULT_CONFIG["moderate_threshold"]))
+        st.session_state["cfg_needs"]        = float(cfg.get("needs_attention_threshold", DEFAULT_CONFIG["needs_attention_threshold"]))
+        st.session_state["cfg_conservative"] = float(cfg.get("conservative_percentile", DEFAULT_CONFIG["conservative_percentile"]))
+        st.session_state["cfg_trend"]        = int(cfg.get("trend_lookback", DEFAULT_CONFIG["trend_lookback"]))
+        st.session_state["cfg_min_warn"]     = int(cfg.get("min_sprints_warning", DEFAULT_CONFIG["min_sprints_warning"]))
 
     # ── Analysis Settings ─────────────────────────────────────────────────────
     st.subheader("Analysis Settings")
