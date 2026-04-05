@@ -1098,7 +1098,7 @@ def generate_narrative(rating, recent_trend, smooth_trend, m, cfg, unit_label):
     return "\n\n".join(paragraphs)
 
 
-def generate_results_pdf(team_name: str, cfg: dict, m: dict, unit_label: str) -> bytes:
+def generate_results_pdf(team_name: str, cfg: dict, m: dict, unit_label: str, labels: list = None) -> bytes:
     from io import BytesIO
     import datetime
     from reportlab.lib import colors
@@ -1253,17 +1253,35 @@ def generate_results_pdf(team_name: str, cfg: dict, m: dict, unit_label: str) ->
 
     # ── Window detail ─────────────────────────────────────────────────────────
     windows = m.get("windows", [])
+    w_size  = int(cfg.get("sprints_per_window", 5))
     if windows:
         story.append(Paragraph("Window Detail", heading_style))
-        win_rows = [["Window", f"Typical {unit_label}", "Conservative Floor", "Ratio"]]
-        for w in windows:
-            win_rows.append([
-                str(w["window"]),
-                f"{w['typical']:.1f}",
-                f"{w['conservative']:.1f}",
-                f"{w['ratio']:.2%}",
-            ])
-        win_tbl = Table(win_rows, colWidths=[1.5*inch, 2*inch, 2*inch, 1.5*inch])
+        has_labels = labels and len(labels) >= w_size
+        if has_labels:
+            win_rows = [["Window", "Sprints", f"Typical {unit_label}", "Conservative Floor", "Ratio"]]
+        else:
+            win_rows = [["Window", f"Typical {unit_label}", "Conservative Floor", "Ratio"]]
+        for i, w in enumerate(windows):
+            if has_labels:
+                sprint_names = ", ".join(labels[i: i + w_size])
+                win_rows.append([
+                    str(w["window"]),
+                    sprint_names,
+                    f"{w['typical']:.1f}",
+                    f"{w['conservative']:.1f}",
+                    f"{w['ratio']:.2%}",
+                ])
+            else:
+                win_rows.append([
+                    str(w["window"]),
+                    f"{w['typical']:.1f}",
+                    f"{w['conservative']:.1f}",
+                    f"{w['ratio']:.2%}",
+                ])
+        if has_labels:
+            win_tbl = Table(win_rows, colWidths=[0.7*inch, 2.8*inch, 1.2*inch, 1.3*inch, 1*inch])
+        else:
+            win_tbl = Table(win_rows, colWidths=[1.5*inch, 2*inch, 2*inch, 1.5*inch])
         win_tbl.setStyle(TableStyle([
             ('BACKGROUND',  (0, 0), (-1, 0), NAVY),
             ('TEXTCOLOR',   (0, 0), (-1, 0), colors.white),
@@ -1540,7 +1558,7 @@ The overall rating is based on the **average ratio** across all windows:
 
     # ── Export ────────────────────────────────────────────────────────────────
     st.divider()
-    pdf_bytes = generate_results_pdf(team_name, cfg, m, unit_label)
+    pdf_bytes = generate_results_pdf(team_name, cfg, m, unit_label, labels)
     st.download_button(
         "Download Results as PDF",
         pdf_bytes,
@@ -1823,14 +1841,18 @@ A ratio of **0.30** means delivery is highly variable — you can only reliably 
         with st.expander("Window Detail", expanded=False):
             wdf = pd.DataFrame(windows)
             wdf.columns = ["Window", f"Typical {unit_label}", "Conservative Floor", "Ratio"]
+            wdf["Sprints"] = [
+                ", ".join(labels[i: i + w_size]) for i in range(len(windows))
+            ]
             wdf["Ratio"]                 = wdf["Ratio"].map("{:.2%}".format)
             wdf[f"Typical {unit_label}"] = wdf[f"Typical {unit_label}"].map("{:.1f}".format)
             wdf["Conservative Floor"]    = wdf["Conservative Floor"].map("{:.1f}".format)
+            wdf = wdf[["Window", "Sprints", f"Typical {unit_label}", "Conservative Floor", "Ratio"]]
             st.dataframe(wdf, use_container_width=True, hide_index=True)
 
     # ── PDF download ──────────────────────────────────────────────────────────
     st.divider()
-    pdf_bytes = generate_results_pdf(team_name, cfg, m, unit_label)
+    pdf_bytes = generate_results_pdf(team_name, cfg, m, unit_label, labels)
     st.download_button(
         "Download Results as PDF",
         pdf_bytes,
