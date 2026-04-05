@@ -11,7 +11,7 @@ import plotly.graph_objects as go
 from calculations import compute_predictability
 
 st.set_page_config(
-    page_title="Sprint Predictability",
+    page_title="Measuring Completion Predictability",
     layout="wide",
     initial_sidebar_state="expanded",
 )
