@@ -501,7 +501,7 @@ def get_team_summary(team_id: str) -> dict:
 
 
 def page_teams():
-    st.components.v1.html("<script>window.scrollTo(0, 0);</script>", height=0)
+    st.components.v1.html("<script>window.parent.document.querySelector('section.main').scrollTo(0, 0);</script>", height=0)
     st.title("Your Teams")
 
     teams = get_teams()
@@ -599,7 +599,7 @@ def page_teams():
 
 
 def page_sprint_data():
-    st.components.v1.html("<script>window.scrollTo(0, 0);</script>", height=0)
+    st.components.v1.html("<script>window.parent.document.querySelector('section.main').scrollTo(0, 0);</script>", height=0)
     team_id   = st.session_state["current_team_id"]
     team_name = st.session_state.get("current_team_name", "Team")
     st.title(f"Sprint Data — {team_name}")
@@ -744,7 +744,7 @@ def page_sprint_data():
 
 
 def page_configuration():
-    st.components.v1.html("<script>window.scrollTo(0, 0);</script>", height=0)
+    st.components.v1.html("<script>window.parent.document.querySelector('section.main').scrollTo(0, 0);</script>", height=0)
     team_id   = st.session_state["current_team_id"]
     team_name = st.session_state.get("current_team_name", "Team")
     st.title(f"Configuration — {team_name}")
@@ -1271,7 +1271,7 @@ def generate_results_pdf(team_name: str, cfg: dict, m: dict, unit_label: str) ->
 
 
 def page_results():
-    st.components.v1.html("<script>window.scrollTo(0, 0);</script>", height=0)
+    st.components.v1.html("<script>window.parent.document.querySelector('section.main').scrollTo(0, 0);</script>", height=0)
     team_id   = st.session_state["current_team_id"]
     team_name = st.session_state.get("current_team_name", "Team")
     st.title(f"Results — {team_name}")
