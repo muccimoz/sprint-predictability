@@ -1160,14 +1160,16 @@ def generate_results_pdf(team_name: str, cfg: dict, m: dict, unit_label: str) ->
     story.append(Spacer(1, 8))
 
     # ── What this means ───────────────────────────────────────────────────────
-    if rating in RATING_EXPLANATIONS:
-        story.append(Paragraph("What This Means", heading_style))
-        story.append(Paragraph(f"<b>Rating: {rating}</b>", body_style))
-        story.append(Paragraph(RATING_EXPLANATIONS[rating], body_style))
-    tt = trend_text(recent_trend, smooth_trend)
-    if tt:
-        story.append(Paragraph("<b>Trend</b>", body_style))
-        story.append(Paragraph(tt, body_style))
+    story.append(Paragraph("What This Means", heading_style))
+    import re
+    narrative = generate_narrative(rating, recent_trend, smooth_trend, m, cfg, unit_label)
+    for line in narrative.split("\n"):
+        line = line.strip()
+        if not line:
+            continue
+        # Convert **bold** markdown to reportlab <b> tags
+        line = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', line)
+        story.append(Paragraph(line, body_style))
 
     # ── Analysis settings ─────────────────────────────────────────────────────
     story.append(Paragraph("Analysis Settings", heading_style))
@@ -1177,8 +1179,7 @@ def generate_results_pdf(team_name: str, cfg: dict, m: dict, unit_label: str) ->
     cfg_data = [
         ["Setting",                  "Value"],
         ["Unit of Work",             unit_label],
-        ["Analysis Mode",            mode],
-        ["Sprints per Window",       str(w_size) if mode == "Rolling" else "N/A"],
+        ["Sprints per Window",       str(w_size)],
         ["Conservative Percentile",  f"{pct}th percentile"],
         ["Sprints in Analysis",      str(m.get("sprints_in_analysis", "—"))],
         ["Windows Computed",         str(len(m.get("windows", [])))],
@@ -1684,57 +1685,129 @@ def page_shared_results(token: str):
     if warning and "Warning" in warning:
         st.warning(warning)
 
-    # What this means
+    # ── Narrative ─────────────────────────────────────────────────────────────
     st.divider()
     st.subheader("What This Means")
-    if rating in RATING_EXPLANATIONS:
-        st.markdown(f"**Rating: {rating}**")
-        st.write(RATING_EXPLANATIONS[rating])
-    tt = trend_text(recent_trend, smooth_trend)
-    if tt:
-        st.markdown("**Trend**")
-        st.write(tt)
+    narrative = generate_narrative(rating, recent_trend, smooth_trend, m, cfg, unit_label)
+    st.markdown(narrative)
 
-    # Chart
+    # ── Charts ────────────────────────────────────────────────────────────────
     windows = m.get("windows", [])
     if len(windows) > 1:
+        x = [f"Window {w['window']}" for w in windows]
+
         st.divider()
-        st.subheader("Predictability Ratio Over Time")
+        st.subheader("Predictability Ratio per Window")
         ratios = [w["ratio"] for w in windows]
-        x      = [f"Window {w['window']}" for w in windows]
-        fig = go.Figure()
-        fig.add_trace(go.Scatter(
+        fig_top = go.Figure()
+        fig_top.add_trace(go.Scatter(
             x=x, y=ratios, mode="lines+markers",
             name="Predictability Ratio",
             line=dict(color="#3498db", width=2),
             marker=dict(size=6),
+            showlegend=True,
         ))
         for label, val, lcolor in [
             ("Strong",          cfg.get("strong_threshold", 0.5),          "#2ecc71"),
             ("Moderate",        cfg.get("moderate_threshold", 0.33),        "#f39c12"),
             ("Needs Attention", cfg.get("needs_attention_threshold", 0.25), "#e74c3c"),
         ]:
-            fig.add_hline(y=val, line_dash="dash", line_color=lcolor,
-                          annotation_text=label, annotation_position="right")
-        fig.update_layout(
+            fig_top.add_hline(y=val, line_dash="dash", line_color=lcolor,
+                              annotation_text=label, annotation_position="right")
+        fig_top.update_layout(
             yaxis=dict(tickformat=".0%", range=[0, max(1.05, max(ratios) + 0.05)], title="Ratio"),
             xaxis=dict(title="Window"),
-            height=400, margin=dict(r=130), legend=dict(orientation="h"),
+            height=380, margin=dict(r=130, b=100),
+            legend=dict(orientation="h", x=0.5, xanchor="center", y=-0.30, yanchor="top"),
         )
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig_top, use_container_width=True)
 
-    # Window detail
+        st.subheader("Typical vs Conservative Completion per Window")
+        typicals = [round(w["typical"])      for w in windows]
+        conservs = [round(w["conservative"]) for w in windows]
+        fig_bot = go.Figure()
+        fig_bot.add_trace(go.Scatter(x=x, y=typicals, mode="lines+markers", name="Typical",
+            line=dict(color="#3498db", width=2), marker=dict(size=6)))
+        fig_bot.add_trace(go.Scatter(x=x, y=conservs, mode="lines+markers", name="Conservative",
+            line=dict(color="#e74c3c", width=2), marker=dict(size=6)))
+        fig_bot.add_trace(go.Scatter(
+            x=x + x[::-1], y=typicals + conservs[::-1],
+            fill="toself", fillcolor="rgba(243, 156, 18, 0.15)",
+            line=dict(color="rgba(255,255,255,0)"), hoverinfo="skip",
+            showlegend=True, name="Gap",
+        ))
+        fig_bot.update_layout(
+            yaxis=dict(title=unit_label), xaxis=dict(title="Window"),
+            height=380, margin=dict(r=30, b=100),
+            legend=dict(orientation="h", x=0.5, xanchor="center", y=-0.30, yanchor="top"),
+        )
+        st.plotly_chart(fig_bot, use_container_width=True)
+
+    # ── How is the ratio calculated? ──────────────────────────────────────────
+    with st.expander("How is the ratio calculated?"):
+        pct        = int(cfg.get("conservative_percentile", 0.15) * 100)
+        confidence = 100 - pct
+        w_size     = cfg.get("sprints_per_window", 5)
+        st.markdown(f"""
+The predictability ratio answers: *"How much of what this team typically delivers can you count on?"*
+
+For each rolling window of **{w_size} sprints**:
+- **Typical delivery** = the median completed {unit_label.lower()} across the window
+- **Conservative floor** = the {pct}th percentile — the team met or exceeded this level {confidence}% of the time
+- **Ratio** = conservative floor ÷ typical delivery
+
+For example, a ratio of **0.80** means you can reliably count on 80% of what this team typically delivers.
+A ratio of **0.30** means delivery is highly variable — you can only reliably count on 30%.
+
+| Rating | Threshold |
+|---|---|
+| Strong | ≥ {cfg.get("strong_threshold", 0.5):.0%} |
+| Moderate | ≥ {cfg.get("moderate_threshold", 0.33):.0%} |
+| Needs Attention | ≥ {cfg.get("needs_attention_threshold", 0.25):.0%} |
+| Very Weak | below {cfg.get("needs_attention_threshold", 0.25):.0%} |
+        """)
+
+    # ── Statistical detail ────────────────────────────────────────────────────
+    st.divider()
+    with st.expander("Statistical Detail", expanded=False):
+        col_a, col_b = st.columns(2)
+        with col_a:
+            st.markdown("**Core Metrics**")
+            for label, val, fmt in [
+                ("Sprints in analysis",                       m["sprints_in_analysis"], "d"),
+                (f"Avg typical {unit_label.lower()}/window",  m["avg_typical"],         ".1f"),
+                ("Avg conservative floor",                    m["avg_conservative"],    ".1f"),
+                ("Avg ratio",                                 m["avg_ratio"],           ".2%"),
+                ("Min ratio",                                 m["min_ratio"],           ".2%"),
+                ("Max ratio",                                 m["max_ratio"],           ".2%"),
+                (f"Std dev of completed {unit_label.lower()}", m["std_dev"],            ".1f"),
+            ]:
+                if val is not None:
+                    st.write(f"{label}: **{format(val, fmt) if fmt != 'd' else str(val)}**")
+        with col_b:
+            st.markdown("**Trend Detail**")
+            lookback = cfg.get("trend_lookback", 5)
+            for label, val, fmt in [
+                ("Most recent window ratio",             m["most_recent_ratio"],   ".2%"),
+                (f"Ratio {lookback} windows ago",        m["ratio_n_periods_ago"], ".2%"),
+                ("Recent trend",                         recent_trend,             None),
+                ("Smoothed trend",                       smooth_trend,             None),
+            ]:
+                if val is not None:
+                    st.write(f"{label}: **{format(val, fmt) if fmt else str(val)}**")
+
+    # ── Window detail ─────────────────────────────────────────────────────────
     if windows:
         st.divider()
-        st.subheader("Window Detail")
-        wdf = pd.DataFrame(windows)
-        wdf.columns = ["Window", f"Typical {unit_label}", "Conservative Floor", "Ratio"]
-        wdf["Ratio"]                 = wdf["Ratio"].map("{:.2%}".format)
-        wdf[f"Typical {unit_label}"] = wdf[f"Typical {unit_label}"].map("{:.1f}".format)
-        wdf["Conservative Floor"]    = wdf["Conservative Floor"].map("{:.1f}".format)
-        st.dataframe(wdf, use_container_width=True, hide_index=True)
+        with st.expander("Window Detail", expanded=False):
+            wdf = pd.DataFrame(windows)
+            wdf.columns = ["Window", f"Typical {unit_label}", "Conservative Floor", "Ratio"]
+            wdf["Ratio"]                 = wdf["Ratio"].map("{:.2%}".format)
+            wdf[f"Typical {unit_label}"] = wdf[f"Typical {unit_label}"].map("{:.1f}".format)
+            wdf["Conservative Floor"]    = wdf["Conservative Floor"].map("{:.1f}".format)
+            st.dataframe(wdf, use_container_width=True, hide_index=True)
 
-    # PDF download
+    # ── PDF download ──────────────────────────────────────────────────────────
     st.divider()
     pdf_bytes = generate_results_pdf(team_name, cfg, m, unit_label)
     st.download_button(
