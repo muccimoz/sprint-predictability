@@ -340,9 +340,9 @@ DEFAULT_CONFIG = {
     "unit_of_work":              "Point",
     "analysis_mode":             "Rolling",
     "sprints_per_window":        5,
-    "strong_threshold":          0.5,
-    "moderate_threshold":        0.33,
-    "needs_attention_threshold": 0.25,
+    "strong_threshold":          0.80,
+    "moderate_threshold":        0.65,
+    "needs_attention_threshold": 0.50,
     "conservative_percentile":   0.15,
     "trend_lookback":            5,
     "min_sprints_warning":       10,
@@ -781,9 +781,9 @@ def page_configuration():
         st.session_state["cfg_unit"]         = "Point"
         st.session_state["cfg_mode"]         = "Rolling"
         st.session_state["cfg_window"]       = 5
-        st.session_state["cfg_strong"]       = 0.5
-        st.session_state["cfg_moderate"]     = 0.33
-        st.session_state["cfg_needs"]        = 0.25
+        st.session_state["cfg_strong"]       = 0.80
+        st.session_state["cfg_moderate"]     = 0.65
+        st.session_state["cfg_needs"]        = 0.50
         st.session_state["cfg_conservative"] = 0.15
         st.session_state["cfg_trend"]        = 5
         st.session_state["cfg_min_warn"]     = 10
