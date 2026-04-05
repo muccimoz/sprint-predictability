@@ -1511,9 +1511,13 @@ The overall rating is based on the **average ratio** across all windows:
         with st.expander("Window Detail", expanded=False):
             wdf = pd.DataFrame(windows)
             wdf.columns = ["Window", f"Typical {unit_label}", "Conservative Floor", "Ratio"]
+            wdf["Sprints"] = [
+                ", ".join(labels[i: i + w_size]) for i in range(len(windows))
+            ]
             wdf["Ratio"]                 = wdf["Ratio"].map("{:.2%}".format)
             wdf[f"Typical {unit_label}"] = wdf[f"Typical {unit_label}"].map("{:.1f}".format)
             wdf["Conservative Floor"]   = wdf["Conservative Floor"].map("{:.1f}".format)
+            wdf = wdf[["Window", "Sprints", f"Typical {unit_label}", "Conservative Floor", "Ratio"]]
             st.dataframe(wdf, use_container_width=True, hide_index=True)
 
     # ── Export ────────────────────────────────────────────────────────────────
