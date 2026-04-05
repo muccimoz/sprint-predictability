@@ -503,6 +503,11 @@ def get_team_summary(team_id: str) -> dict:
 def page_teams():
     st.title("Your Teams")
 
+    if st.session_state.pop("team_created_success", None):
+        st.success(st.session_state.pop("team_created_name", "Team created."))
+    if st.session_state.pop("team_deleted_success", None):
+        st.success(st.session_state.pop("team_deleted_name", "Team deleted."))
+
     teams = get_teams()
 
     with st.expander("How to use this page"):
@@ -520,7 +525,8 @@ def page_teams():
             if st.form_submit_button("Add Team"):
                 if name.strip():
                     create_team(name.strip())
-                    st.success(f"Team '{name.strip()}' created.")
+                    st.session_state["team_created_success"] = True
+                    st.session_state["team_created_name"] = f"Team '{name.strip()}' created."
                     st.rerun()
                 else:
                     st.warning("Please enter a team name.")
@@ -589,11 +595,14 @@ def page_teams():
             st.warning(f"Delete **{team['name']}**? This will also delete all sprint data for this team.")
             c1, c2 = st.columns(2)
             if c1.button("Yes, delete", key=f"yes_del_{team['id']}"):
+                deleted_name = team["name"]
                 delete_team(team["id"])
                 if st.session_state.get("current_team_id") == team["id"]:
                     st.session_state.pop("current_team_id",   None)
                     st.session_state.pop("current_team_name", None)
                 st.session_state.pop(f"confirm_delete_{team['id']}", None)
+                st.session_state["team_deleted_success"] = True
+                st.session_state["team_deleted_name"] = f"Team '{deleted_name}' deleted."
                 st.rerun()
             if c2.button("Cancel", key=f"no_del_{team['id']}"):
                 st.session_state.pop(f"confirm_delete_{team['id']}", None)
@@ -604,6 +613,9 @@ def page_sprint_data():
     team_id   = st.session_state["current_team_id"]
     team_name = st.session_state.get("current_team_name", "Team")
     st.title(f"Sprint Data — {team_name}")
+
+    if st.session_state.pop("sprint_data_saved", False):
+        st.success("Sprint data saved.")
 
     sprints = get_sprint_data(team_id)
 
@@ -679,7 +691,7 @@ def page_sprint_data():
                     "sort_order":       int(row["Order"]) if pd.notna(row["Order"]) else idx + 1,
                 })
             replace_sprint_data(team_id, records)
-            st.success("Sprint data saved.")
+            st.session_state["sprint_data_saved"] = True
             st.rerun()
 
     # ── Tab: Import CSV ───────────────────────────────────────────────────────
