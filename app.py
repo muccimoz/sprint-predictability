@@ -111,19 +111,37 @@ def _parse_expires_at(data: dict) -> float:
 def restore_session() -> bool:
     if not st.session_state.get("access_token"):
         return False
+
+    expires_at = st.session_state.get("expires_at", 0)
+
+    # Proactively refresh if the token is expired or expiry is unknown.
+    # expires_at is never saved to user_sessions, so after a server-session
+    # restore it defaults to 0 — triggering a refresh on every browser reload.
+    # This avoids set_session() silently accepting an expired token and then
+    # failing on the first real DB call.
+    if time.time() >= expires_at - 60:
+        data = _raw_token_refresh(st.session_state.get("refresh_token", ""))
+        if not (data and data.get("access_token")):
+            clear_session()
+            return False
+        st.session_state["access_token"]  = data["access_token"]
+        st.session_state["refresh_token"] = data.get("refresh_token", st.session_state["refresh_token"])
+        st.session_state["expires_at"]    = _parse_expires_at(data)
+        st.session_state.pop("supabase_client", None)
+
     try:
         get_supabase().auth.set_session(
             st.session_state["access_token"],
             st.session_state["refresh_token"],
         )
     except Exception:
-        # Access token is expired — exchange the refresh token via the REST API directly
+        # set_session threw even with a freshly-refreshed token — last-resort attempt
         data = _raw_token_refresh(st.session_state.get("refresh_token", ""))
         if data and data.get("access_token"):
             st.session_state["access_token"]  = data["access_token"]
             st.session_state["refresh_token"] = data.get("refresh_token", st.session_state["refresh_token"])
+            st.session_state["expires_at"]    = _parse_expires_at(data)
             st.session_state.pop("supabase_client", None)
-            update_server_session()
             try:
                 get_supabase().auth.set_session(data["access_token"], data.get("refresh_token", ""))
             except Exception:
