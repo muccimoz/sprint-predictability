@@ -436,6 +436,11 @@ def page_login():
     st.write("Evaluating completion patterns to assess planning confidence.")
     st.divider()
 
+    # Temporary diagnostic — shows why a token refresh failed, if one was attempted
+    debug = st.session_state.pop("debug_refresh_detail", None)
+    if debug:
+        st.warning(f"Session refresh failed: {debug}")
+
 
     tab_login, tab_signup = st.tabs(["Log In", "Sign Up"])
 
